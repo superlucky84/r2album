@@ -111,7 +111,7 @@ Files:
 
 ---
 
-## Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙: pending
+## Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙: done
 
 Refs: RQ-4, RQ-5, RQ-6, RQ-7, RQ-12, DC-4, DC-5, DC-6, DC-11, M-3, M-4, M-5, M-11
 
@@ -120,13 +120,13 @@ Refs: RQ-4, RQ-5, RQ-6, RQ-7, RQ-12, DC-4, DC-5, DC-6, DC-11, M-3, M-4, M-5, M-1
 - `DC-5`(Worker R2 네이티브 바인딩 업로드 vs Presigned URL) 최종 확정.
 
 ### Implementation Checklist
-- [ ] `src/worker/routes/media.ts`: `GET /api/media/:variant/:id` (`requireAuth`, R2 객체 조회, `ETag`/`If-None-Match` 304 지원, `Cache-Control: private, max-age=31536000, immutable`).
-- [ ] `src/worker/routes/admin.ts`:
+- [x] `src/worker/routes/media.ts`: `GET /api/media/:variant/:id` (`requireAuth`, R2 객체 조회, `ETag`/`If-None-Match` 304 지원, `Cache-Control: private, max-age=31536000, immutable`).
+- [x] `src/worker/routes/admin.ts`:
   - `POST /api/admin/images`: `image/webp` 매직 바이트 및 크기 검증(`display <= 5MB`, `thumb <= 512KB`), R2 2종 저장 + D1 `images`/`tags`/`image_tags` 기록, D1 실패 시 R2 롤백 삭제.
   - `PATCH /api/admin/images/:id`: 캡션, 앨범, 태그, `takenAt` 수정.
   - `DELETE /api/admin/images/:id` 및 `POST /api/admin/images/bulk-delete`: D1 및 R2 객체 동시 삭제.
   - `/api/admin/albums`, `/api/admin/users` (조회·직접 등록·승인/거절/역할 변경 `PATCH`·삭제 및 `BOOTSTRAP_ADMIN_EMAIL` 보호 포함), `/api/admin/stats` 구현.
-- [ ] `src/worker/routes/images.ts`:
+- [x] `src/worker/routes/images.ts`:
   - `GET /api/images`: `offset`, `limit`(최대 100 clamp), `albumId`, `tag` 지원, `ORDER BY taken_at DESC, id DESC` 구간 조회 및 `total` 반환.
   - `GET /api/images/ids`: 액자 롤링용 경량 목록 조회.
   - `GET /api/filters`: 앨범별·태그별 카운트 집계 반환.
@@ -139,6 +139,17 @@ Refs: RQ-4, RQ-5, RQ-6, RQ-7, RQ-12, DC-4, DC-5, DC-6, DC-11, M-3, M-4, M-5, M-1
 
 ### Exit Criteria
 - 모든 갤러리 조회 API, Private R2 미디어 스트리밍 API, 관리자 CRUD API가 계약(`DESIGN.md` §5)대로 동작하고 테스트를 통과한다.
+
+Files:
+- `docs/IMPLEMENT.md` (modified)
+- `src/worker/__tests__/api.test.ts` (added)
+- `src/worker/__tests__/testHarness.ts` (added)
+- `src/worker/index.ts` (modified)
+- `src/worker/routes/admin.ts` (added)
+- `src/worker/routes/images.ts` (added)
+- `src/worker/routes/media.ts` (added)
+- `src/worker/validation.ts` (added)
+- `tsconfig.worker.json` (modified)
 
 ---
 
@@ -264,9 +275,10 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
 - **Completed:**
   - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-11`) 전원 확정 완료 (`86172d4`).
   - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 및 커밋·푸시 (`3c004c8`).
-  - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 (`migrations/0002_user_approval.sql`, OAuth PKCE, `pending`/`approved`/`rejected` 플로우, Vitest 5파일 22건 통과).
+  - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 및 커밋·푸시 (`ba503d5`).
+  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 (미커밋 상태; 실제 SQLite 마이그레이션 기반 테스트 포함 6파일 26건 통과).
 - **Next Step:**
-  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 진행.
+  - `Phase 3` 코드 리뷰 여부 결정(또는 커밋) 후 `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` 시작.
 - **Blockers:**
   - 없음.
-- **Latest Commit SHA:** `3c004c8`
+- **Latest Commit SHA:** `ba503d5`

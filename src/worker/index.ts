@@ -3,6 +3,9 @@ import { ApiError } from './errors';
 import type { ApiErrorBody, HealthResponse } from '../shared/types';
 import { requireAdmin, requireAuth, type AppEnv } from './auth/middleware';
 import { createAuthRoutes, type AuthRoutesOptions } from './routes/auth';
+import { createMediaRoutes } from './routes/media';
+import { createImageRoutes } from './routes/images';
+import { createAdminRoutes } from './routes/admin';
 
 export type CreateAppOptions = AuthRoutesOptions;
 
@@ -30,6 +33,11 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use('/api/admin/*', requireAuth, requireAdmin);
   app.use('/api/admin', requireAuth, requireAdmin);
 
+  // Authenticated & Admin domain routes
+  app.route('/', createMediaRoutes());
+  app.route('/', createImageRoutes());
+  app.route('/', createAdminRoutes());
+
   app.notFound((c) => {
     const path = new URL(c.req.url).pathname;
     if (path.startsWith('/api/') || path.startsWith('/auth/')) {
@@ -43,7 +51,9 @@ export function createApp(options: CreateAppOptions = {}) {
     }
 
     if (c.env?.ASSETS) {
-      return c.env.ASSETS.fetch(c.req.raw);
+      return c.env.ASSETS.fetch(
+        c.req.raw as unknown as Parameters<typeof c.env.ASSETS.fetch>[0]
+      ) as unknown as Promise<Response>;
     }
 
     const body: ApiErrorBody = {
