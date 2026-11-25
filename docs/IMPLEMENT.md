@@ -9,7 +9,7 @@
 
 ---
 
-## Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축: pending
+## Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축: done
 
 Refs: RQ-1, RQ-2, DC-1, DC-9, DC-10, M-10
 
@@ -18,11 +18,11 @@ Refs: RQ-1, RQ-2, DC-1, DC-9, DC-10, M-10
 - Node.js (v22+) 및 pnpm 사용 가능.
 
 ### Implementation Checklist
-- [ ] `package.json`, `tsconfig.json`, `vite.config.ts`, `eslint.config.js`, `.prettierrc`, `.gitignore` 초기화 (`lithent`, `@lithent/lithent-vite`, `@tailwindcss/vite`, `tailwindcss`, `hono`, `wrangler`, `vitest`, `@testing-library/dom`, `happy-dom` 포함; `.dev.vars` 및 `.wrangler/` git 제외).
-- [ ] `wrangler.jsonc` 구성 (Static Assets `./dist/client`, SPA fallback, `run_worker_first: ["/api/*", "/auth/*"]`, D1 `DB`, R2 `MEDIA_BUCKET`, Vars 스켈레톤) 및 `.dev.vars.example` 작성.
-- [ ] `src/worker/index.ts` 헬스체크(`GET /api/health`) 및 공통 에러 포맷(`{ error: { code, message } }`) 구축.
-- [ ] `src/client/index.tsx` Lithent 최소 앱 마운트 및 Vite 개발 프록시(`/api`, `/auth` → Wrangler) 연결.
-- [ ] `migrations/0001_init.sql` 작성 및 로컬 D1 마이그레이션 스크립트(`pnpm db:migrate:local`) 검증.
+- [x] `package.json`, `tsconfig.json`, `vite.config.ts`, `eslint.config.js`, `.prettierrc`, `.gitignore` 초기화 (`lithent`, `@lithent/lithent-vite`, `@tailwindcss/vite`, `tailwindcss`, `hono`, `wrangler`, `vitest`, `@testing-library/dom`, `happy-dom` 포함; `.dev.vars` 및 `.wrangler/` git 제외).
+- [x] `wrangler.jsonc` 구성 (Static Assets `./dist/client`, SPA fallback, `run_worker_first: ["/api/*", "/auth/*"]`, D1 `DB`, R2 `MEDIA_BUCKET`, Vars 스켈레톤) 및 `.dev.vars.example` 작성.
+- [x] `src/worker/index.ts` 헬스체크(`GET /api/health`) 및 공통 에러 포맷(`{ error: { code, message } }`) 구축.
+- [x] `src/client/index.tsx` Lithent 최소 앱 마운트 및 Vite 개발 프록시(`/api`, `/auth` → Wrangler) 연결.
+- [x] `migrations/0001_init.sql` 작성 및 로컬 D1 마이그레이션 스크립트(`pnpm db:migrate:local`) 검증.
 
 ### Baseline Tests
 - `pnpm type-check` 및 `pnpm lint` 통과.
@@ -32,6 +32,33 @@ Refs: RQ-1, RQ-2, DC-1, DC-9, DC-10, M-10
 ### Exit Criteria
 - 로컬에서 `vite` + `wrangler dev`로 Lithent SPA가 열리고 `/api/health` 응답(`200 OK`)이 확인된다.
 - 로컬 D1 마이그레이션이 오류 없이 적용된다.
+
+Files:
+- `.dev.vars.example` (added)
+- `.gitignore` (added)
+- `.prettierrc` (added)
+- `docs/IMPLEMENT.md` (modified)
+- `eslint.config.js` (added)
+- `index.html` (added)
+- `migrations/0001_init.sql` (added)
+- `package.json` (added)
+- `pnpm-lock.yaml` (added)
+- `pnpm-workspace.yaml` (added)
+- `src/client/App.tsx` (added)
+- `src/client/__tests__/App.test.tsx` (added)
+- `src/client/index.css` (added)
+- `src/client/index.tsx` (added)
+- `src/shared/constants.ts` (added)
+- `src/shared/types.ts` (added)
+- `src/worker/__tests__/health.test.ts` (added)
+- `src/worker/env.ts` (added)
+- `src/worker/errors.ts` (added)
+- `src/worker/index.ts` (added)
+- `tsconfig.json` (added)
+- `tsconfig.worker.json` (added)
+- `vite.config.ts` (added)
+- `vitest.config.ts` (added)
+- `wrangler.jsonc` (added)
 
 ---
 
@@ -212,9 +239,10 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
 ## Handoff
 
 - **Completed:**
-  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-10`) 전원 확정 완료.
+  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-10`) 전원 확정 완료 (`86172d4`).
+  - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 (미커밋 상태; `type-check`, `lint`, `format:check`, `build`, `test`, `db:migrate:local`, `wrangler dev` 스모크 검증 통과).
 - **Next Step:**
-  - (선택) 문서 초안 초기 커밋 후 `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 시작.
+  - `Phase 1` 코드 리뷰 여부 결정(또는 커밋) 후 `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키 & 역할 기반 접근 제어(RBAC)` 시작.
 - **Blockers:**
-  - 없음 (Phase 1 진입 가능).
-- **Latest Commit SHA:** `none` (초기 빈 저장소, 아직 커밋 없음)
+  - 없음.
+- **Latest Commit SHA:** `86172d4`

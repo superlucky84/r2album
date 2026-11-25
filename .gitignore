@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build & local runtime
+dist/
+.wrangler/
+
+# Secrets (never commit)
+.dev.vars
+.env
+.env.*
+!.dev.vars.example
+
+# OS & Editor
+.DS_Store
+*.log
+coverage/
