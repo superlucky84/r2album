@@ -1,10 +1,13 @@
 import { Hono } from 'hono';
-import type { WorkerBindings } from './env';
 import { ApiError } from './errors';
 import type { ApiErrorBody, HealthResponse } from '../shared/types';
+import { requireAdmin, requireAuth, type AppEnv } from './auth/middleware';
+import { createAuthRoutes, type AuthRoutesOptions } from './routes/auth';
 
-export function createApp() {
-  const app = new Hono<{ Bindings: WorkerBindings }>();
+export type CreateAppOptions = AuthRoutesOptions;
+
+export function createApp(options: CreateAppOptions = {}) {
+  const app = new Hono<AppEnv>();
 
   app.get('/api/health', (c) => {
     const body: HealthResponse = {
@@ -14,6 +17,18 @@ export function createApp() {
     };
     return c.json(body);
   });
+
+  // Public auth endpoints (/auth/*, /api/me)
+  app.route('/', createAuthRoutes(options));
+
+  // Role-based access guards for protected API prefixes
+  app.use('/api/images/*', requireAuth);
+  app.use('/api/images', requireAuth);
+  app.use('/api/filters', requireAuth);
+  app.use('/api/media/*', requireAuth);
+
+  app.use('/api/admin/*', requireAuth, requireAdmin);
+  app.use('/api/admin', requireAuth, requireAdmin);
 
   app.notFound((c) => {
     const path = new URL(c.req.url).pathname;

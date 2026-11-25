@@ -17,3 +17,4 @@ export const CAPTION_MAX_LENGTH = 500;
 export const TAG_MAX_COUNT = 20;
 export const TAG_MAX_LENGTH = 30;
 export const ALBUM_NAME_MAX_LENGTH = 60;
+export const MAX_PENDING_USERS = 100;

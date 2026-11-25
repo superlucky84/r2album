@@ -62,20 +62,21 @@ Files:
 
 ---
 
-## Phase 2 — Google OAuth 2.0 인증, 세션 쿠키 & 역할 기반 접근 제어(RBAC): pending
+## Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우: done
 
-Refs: RQ-3, RQ-4, DC-3, M-1, M-2
+Refs: RQ-3, RQ-4, RQ-12, DC-3, DC-11, M-1, M-2, M-11
 
 ### Entry Criteria
 - Phase 1 완료.
 - `DC-3`(허용 이메일 관리 방식: `BOOTSTRAP_ADMIN_EMAIL` + D1 `allowed_users` vs 환경변수 전용) 최종 확정.
 
 ### Implementation Checklist
-- [ ] `src/worker/auth/session.ts`: Web Crypto API(`HMAC-SHA256`) 기반 세션 토큰 서명/검증 및 `HttpOnly; SameSite=Lax; Secure` 쿠키 헬퍼 구현(로컬 HTTP 개발 시 Secure 조건부 처리).
-- [ ] `src/worker/auth/google.ts`: PKCE + `state` 쿠키 기반 Google OAuth 인가 URL 생성, 토큰 교환, `email_verified` 검증 구현.
-- [ ] `src/worker/auth/middleware.ts`: `requireAuth`(`admin` | `viewer`), `requireAdmin`(`admin` 전용), 허용 목록 조회(`BOOTSTRAP_ADMIN_EMAIL` + D1 `allowed_users`) 구현.
-- [ ] `src/worker/routes/auth.ts`: `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/logout`, `GET /api/me` 구현.
-- [ ] `src/client/components/LoginView.tsx` 및 인증 가드/클라이언트 라우터(`/`, `/admin`, `/login`) 구현 (`viewer`의 `/admin` 진입 차단 및 비인가 오류 안내 포함).
+- [x] `src/worker/auth/session.ts`: Web Crypto API(`HMAC-SHA256`) 기반 세션 토큰 서명/검증 및 `HttpOnly; SameSite=Lax; Secure` 쿠키 헬퍼 구현(로컬 HTTP 개발 시 Secure 조건부 처리).
+- [x] `src/worker/auth/google.ts`: PKCE + `state` 쿠키 기반 Google OAuth 인가 URL 생성, 토큰 교환, `email_verified` 검증 구현.
+- [x] `src/worker/auth/middleware.ts`: `requireAuth`(`admin` | `viewer`), `requireAdmin`(`admin` 전용), 허용 목록 조회(`BOOTSTRAP_ADMIN_EMAIL` + D1 `allowed_users`) 구현.
+- [x] `src/worker/routes/auth.ts`: `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/logout`, `GET /api/me` 구현.
+- [x] `src/client/components/LoginView.tsx` 및 인증 가드/클라이언트 라우터(`/`, `/admin`, `/login`) 구현 (`viewer`의 `/admin` 진입 차단 및 비인가 오류 안내 포함).
+- [x] `migrations/0002_user_approval.sql` 추가(`allowed_users.status`, `name`, `updated_at`), OAuth 콜백의 미등록 계정 `pending` 자동 등록(대기열 100명 상한) 및 `approved` 전용 세션 검증, `LoginView` 승인 대기(`/login?status=pending`)·거절(`/login?error=rejected`) 안내 UI 반영.
 
 ### Baseline Tests
 - 세션 토큰 서명/검증/만료/변조 거부 단위 테스트.
@@ -86,11 +87,33 @@ Refs: RQ-3, RQ-4, DC-3, M-1, M-2
 - 미인증 사용자는 모든 데이터·미디어 API에서 `401`을 받고 로그인 화면으로 안내된다.
 - `admin`과 `viewer`의 권한 경계가 서버 미들웨어와 클라이언트 라우터 모두에서 동작한다.
 
+Files:
+- `docs/DESIGN.md` (modified)
+- `docs/IMPLEMENT.md` (modified)
+- `docs/MANUAL_TEST_CHECKLIST.md` (modified)
+- `docs/REQUIREMENTS.md` (modified)
+- `migrations/0002_user_approval.sql` (added)
+- `src/client/App.tsx` (modified)
+- `src/client/__tests__/App.test.tsx` (modified)
+- `src/client/__tests__/LoginView.test.tsx` (added)
+- `src/client/api/client.ts` (added)
+- `src/client/components/LoginView.tsx` (added)
+- `src/client/lib/router.ts` (added)
+- `src/shared/constants.ts` (modified)
+- `src/shared/types.ts` (modified)
+- `src/worker/__tests__/auth.test.ts` (added)
+- `src/worker/__tests__/session.test.ts` (added)
+- `src/worker/auth/google.ts` (added)
+- `src/worker/auth/middleware.ts` (added)
+- `src/worker/auth/session.ts` (added)
+- `src/worker/index.ts` (modified)
+- `src/worker/routes/auth.ts` (added)
+
 ---
 
 ## Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙: pending
 
-Refs: RQ-4, RQ-5, RQ-6, RQ-7, DC-4, DC-5, DC-6, M-3, M-4, M-5
+Refs: RQ-4, RQ-5, RQ-6, RQ-7, RQ-12, DC-4, DC-5, DC-6, DC-11, M-3, M-4, M-5, M-11
 
 ### Entry Criteria
 - Phase 2 완료.
@@ -102,7 +125,7 @@ Refs: RQ-4, RQ-5, RQ-6, RQ-7, DC-4, DC-5, DC-6, M-3, M-4, M-5
   - `POST /api/admin/images`: `image/webp` 매직 바이트 및 크기 검증(`display <= 5MB`, `thumb <= 512KB`), R2 2종 저장 + D1 `images`/`tags`/`image_tags` 기록, D1 실패 시 R2 롤백 삭제.
   - `PATCH /api/admin/images/:id`: 캡션, 앨범, 태그, `takenAt` 수정.
   - `DELETE /api/admin/images/:id` 및 `POST /api/admin/images/bulk-delete`: D1 및 R2 객체 동시 삭제.
-  - `/api/admin/albums`, `/api/admin/users`, `/api/admin/stats` 구현 (`BOOTSTRAP_ADMIN_EMAIL` 보호 포함).
+  - `/api/admin/albums`, `/api/admin/users` (조회·직접 등록·승인/거절/역할 변경 `PATCH`·삭제 및 `BOOTSTRAP_ADMIN_EMAIL` 보호 포함), `/api/admin/stats` 구현.
 - [ ] `src/worker/routes/images.ts`:
   - `GET /api/images`: `offset`, `limit`(최대 100 clamp), `albumId`, `tag` 지원, `ORDER BY taken_at DESC, id DESC` 구간 조회 및 `total` 반환.
   - `GET /api/images/ids`: 액자 롤링용 경량 목록 조회.
@@ -239,10 +262,11 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
 ## Handoff
 
 - **Completed:**
-  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-10`) 전원 확정 완료 (`86172d4`).
-  - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 (미커밋 상태; `type-check`, `lint`, `format:check`, `build`, `test`, `db:migrate:local`, `wrangler dev` 스모크 검증 통과).
+  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-11`) 전원 확정 완료 (`86172d4`).
+  - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 및 커밋·푸시 (`3c004c8`).
+  - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 (`migrations/0002_user_approval.sql`, OAuth PKCE, `pending`/`approved`/`rejected` 플로우, Vitest 5파일 22건 통과).
 - **Next Step:**
-  - `Phase 1` 코드 리뷰 여부 결정(또는 커밋) 후 `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키 & 역할 기반 접근 제어(RBAC)` 시작.
+  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 진행.
 - **Blockers:**
   - 없음.
-- **Latest Commit SHA:** `86172d4`
+- **Latest Commit SHA:** `3c004c8`

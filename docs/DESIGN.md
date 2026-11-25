@@ -101,6 +101,7 @@ r2album/
 | `DC-8` | [x] | **액자 롤링 전환 및 셔플** | **2-레이어 더블 버퍼(`slotA`/`slotB`)** 로 다음 이미지 `new Image()` 프리로드 완료 후 CSS `opacity` 크로스페이드(+ 선택적 Ken Burns). 랜덤 모드는 `/api/images/ids`로 받은 필터 범위 전체 ID에 Fisher-Yates 셔플 큐 적용. | `Phase 6`, `M-8` |
 | `DC-9` | [x] | **Lithent 컴포넌트/테스트 규약** | 복잡한 상태 컨테이너(`VirtualGrid`, `PhotoFrameMode`, `UploadDropzone`)는 `mount`+`state`, 단순 UI는 `lmount`+`lstate` 사용(컴포넌트 내 모드 혼용 금지). 모든 리스트 `key` 필수. 테스트는 `vitest` + `lithent/test` + `@testing-library/dom`. | `Phase 4~7` |
 | `DC-10` | [x] | **로컬 개발 서버 구성** | **확정: `wrangler.jsonc` Static Assets + 개발 시 `vite`(프론트 HMR, `/api` 및 `/auth`를 `wrangler dev`로 프록시) 병행 실행.** Vite 8 + `@lithent/lithent-vite` 조합의 플러그인 호환성 위험을 피하면서, 배포 시에는 `vite build` → `wrangler deploy`로 단일 Cloudflare Worker에 통합됨. | `Phase 1`, `M-10` |
+| `DC-11` | [x] | **OAuth 가입 신청 & 관리자 승인 플로우** | **확정: `allowed_users`에 `status('pending' \| 'approved' \| 'rejected')`와 `name` 컬럼 추가(`migrations/0002_user_approval.sql`).** 미등록 Google 계정이 OAuth 콜백에 도달하면 대기열 상한(`MAX_PENDING_USERS = 100`) 내에서 `status='pending'`으로 자동 등록 후 `/login?status=pending` 리다이렉트(세션 쿠키 미발급). `approved` 상태만 세션 발급·API 허용. | `Phase 2`, `Phase 3`, `Phase 4`, `M-11` |
 
 ---
 
@@ -111,9 +112,12 @@ r2album/
 
 CREATE TABLE allowed_users (
   email TEXT PRIMARY KEY,              -- 소문자 정규화 이메일
+  name TEXT NOT NULL DEFAULT '',       -- Google OAuth 표시 이름 (migrations/0002_user_approval.sql)
   role TEXT NOT NULL CHECK (role IN ('admin', 'viewer')),
+  status TEXT NOT NULL DEFAULT 'approved' CHECK (status IN ('pending', 'approved', 'rejected')),
   note TEXT DEFAULT '',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE albums (
@@ -175,9 +179,12 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
    - 쿼리 `state`와 쿠키 `state` 일치 검증.
    - Google Token Endpoint로 `code` + `code_verifier` + `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` 교환.
    - ID Token / UserInfo에서 `email`, `email_verified === true`, `name`, `picture` 검증.
-   - 허용 목록 확인:
-     - `email.toLowerCase() === env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase()` → `role = 'admin'`
-     - 아니면 D1 `allowed_users` 조회 → 없으면 `403` 비인가 안내 페이지(`/login?error=unauthorized`)로 리다이렉트.
+   - 허용 목록 확인 (`DC-11`):
+     - `email.toLowerCase() === env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase()` → `role = 'admin'` 즉시 로그인 허용.
+     - D1 `allowed_users`에 `status = 'approved'`로 존재 → 해당 `role`로 로그인 허용.
+     - `status = 'rejected'`로 존재 → 세션 쿠키 없이 `/login?error=rejected` 리다이렉트.
+     - `status = 'pending'`으로 이미 존재 → 세션 쿠키 없이 `/login?status=pending` 리다이렉트.
+     - 미등록 신규 계정 → `pending` 건수가 `MAX_PENDING_USERS(100)` 미만이면 `(email, name, role='viewer', status='pending', created_at=now, updated_at=now)` 등록 후 `/login?status=pending` 리다이렉트; 상한 초과 시 `/login?error=signup_closed` 리다이렉트.
    - 서명된 세션 토큰(JWT 또는 HMAC-SHA256 Payload: `{ email, role, name, exp }`, 유효기간 7일)을 `HttpOnly; SameSite=Lax; Secure; Path=/` 쿠키(`r2album_session`)로 설정 후 `/`로 리다이렉트.
 3. `POST /auth/logout`:
    - `r2album_session` 쿠키 즉시 만료 처리.
@@ -213,7 +220,7 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 | `DELETE` | `/api/admin/images/:id` | 이미지 삭제 (R2 2개 객체 + D1 레코드 제거) |
 | `POST` | `/api/admin/images/bulk-delete` | 다중 선택 이미지 일괄 삭제 (`{ ids: string[] }`, 최대 50건/요청) |
 | `POST` / `PATCH` / `DELETE` | `/api/admin/albums` (`/:id`) | 앨범 생성, 이름/설명 수정, 삭제(소속 이미지는 `album_id = NULL` 유지) |
-| `GET` / `POST` / `DELETE` | `/api/admin/users` (`/:email`) | 허용 사용자 목록 조회, `admin`/`viewer` 추가·변경, 제거 (`BOOTSTRAP_ADMIN_EMAIL`은 삭제 불가) |
+| `GET` / `POST` / `PATCH` / `DELETE` | `/api/admin/users` (`/:email`) | 허용/대기 사용자 목록 조회(`pending` 우선 정렬 + `pendingCount`), 직접 사전 등록(`approved`), 승인/거절/역할 변경(`PATCH`: `status`, `role`, `note`), 제거 (`BOOTSTRAP_ADMIN_EMAIL`은 삭제·강등 불가) |
 
 ---
 

@@ -1,31 +1,101 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from 'lithent/test';
-import { screen } from '@testing-library/dom';
+import { fireEvent, screen } from '@testing-library/dom';
 import { App } from '../App';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.history.replaceState(null, '', '/');
 });
 
-describe('App smoke test', () => {
-  it('renders r2album heading and transitions to API Connected on healthy response', async () => {
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+describe('App auth guard & RBAC routing', () => {
+  it('renders LoginView with pending status message when unauthenticated', async () => {
+    window.history.replaceState(null, '', '/login?status=pending');
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, service: 'r2album', timestamp: 123456 }), {
+      new Response(JSON.stringify({ authenticated: false }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
     );
 
     render(<App />);
-    expect(screen.getByRole('heading', { name: 'r2album' })).toBeTruthy();
+    await flushPromises();
 
+    expect(screen.getByTestId('google-login-button')).toBeTruthy();
+    expect(screen.getByTestId('login-notice').textContent).toContain('관리자 승인 대기 중');
+  });
+
+  it('redirects viewer away from /admin and hides admin nav link', async () => {
+    window.history.replaceState(null, '', '/admin');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          authenticated: true,
+          user: { email: 'family@example.com', name: 'Family', role: 'viewer' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+
+    render(<App />);
+    await flushPromises();
+
+    expect(window.location.pathname).toBe('/');
+    expect(screen.getByTestId('gallery-view')).toBeTruthy();
+    expect(screen.queryByTestId('nav-admin-link')).toBeNull();
+  });
+
+  it('allows admin to navigate to /admin and log out', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/me') {
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            user: { email: 'owner@example.com', name: 'Owner', role: 'admin' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url === '/auth/logout') {
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+
+    render(<App />);
+    await flushPromises();
+
+    const adminLink = screen.getByTestId('nav-admin-link');
+    await act(() => {
+      fireEvent.click(adminLink);
+    });
+    expect(window.location.pathname).toBe('/admin');
+    expect(screen.getByTestId('admin-view')).toBeTruthy();
+
+    const logoutBtn = screen.getByTestId('logout-button');
     await act(async () => {
+      fireEvent.click(logoutBtn);
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(screen.getByTestId('health-status').textContent).toContain('API Connected');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/auth/logout',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(screen.getByTestId('google-login-button')).toBeTruthy();
   });
 });
