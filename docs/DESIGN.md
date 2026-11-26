@@ -82,7 +82,8 @@ r2album/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-└── wrangler.jsonc
+├── wrangler.example.jsonc      # Wrangler 설정 템플릿 (로컬에서 wrangler.jsonc로 복사, git 제외)
+└── .dev.vars.example           # 로컬 개발 전용 시크릿 템플릿 (.dev.vars로 복사, git 제외)
 ```
 
 ---
@@ -265,8 +266,8 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 ## 7. 운영 정책 (Operational Policies)
 
 - **시크릿 & 환경변수 목록:**
-  - Secrets (Cloudflare Workers Secrets / 로컬 `.dev.vars`, git 제외): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`
-  - Vars (`wrangler.jsonc`): `BOOTSTRAP_ADMIN_EMAIL`, `APP_ORIGIN` (로컬/프로덕션 OAuth 리다이렉트 기준)
+  - Secrets (Cloudflare Workers Secrets / 로컬 `pnpm dev` 전용 `.dev.vars`, git 제외): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`
+  - Vars (`wrangler.example.jsonc` → 개인 복사본 `wrangler.jsonc`, git 제외): `BOOTSTRAP_ADMIN_EMAIL`, `APP_ORIGIN` (로컬/프로덕션 OAuth 리다이렉트 기준), 선택 `MAX_STORAGE_BYTES` (기본 `9,500,000,000`)
 - **업로드 안전 제한:**
   - Worker에서 파일당 `display <= 5MB`, `thumb <= 512KB`, MIME 타입 `image/webp` 매직 바이트(`RIFF....WEBP`) 검증.
   - **무료 티어 과금 방지 하드캡:** R2 누적 저장 용량이 안전 한도(`9.5 GB` / `9,500,000,000 bytes`, `MAX_STORAGE_BYTES`로 조정 가능)를 초과하는 업로드는 R2 쓰기 전에 `507 STORAGE_LIMIT_EXCEEDED`로 즉시 차단.

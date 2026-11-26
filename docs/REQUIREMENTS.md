@@ -3,7 +3,7 @@
 > **문서 위치 및 코드 범위**
 > - Canonical 문서 위치: `docs/` (`REQUIREMENTS.md`, `DESIGN.md`, `IMPLEMENT.md`, `MANUAL_TEST_CHECKLIST.md`)
 > - 대상 저장소: `r2album` (`https://github.com/superlucky84/r2album`)
-> - 적용 코드 범위: 전체 애플리케이션 (`src/client/` Lithent CSR SPA, `src/worker/` Cloudflare Workers API, `migrations/` D1 SQL 마이그레이션, `wrangler.jsonc`)
+> - 적용 코드 범위: 전체 애플리케이션 (`src/client/` Lithent CSR SPA, `src/worker/` Cloudflare Workers API, `migrations/` D1 SQL 마이그레이션, `wrangler.example.jsonc` / 로컬 `wrangler.jsonc`)
 > - 상태 표기 원칙: **확정 요구사항(Confirmed)** 과 **미확정/추정 항목(`TBD`)** 을 명확히 구분합니다.
 
 ---
@@ -34,7 +34,7 @@
 | `RQ-8` | 갤러리/가상스크롤 | 프론트 메인 화면은 최신순 썸네일 그리드로 표시한다. **Virtual Scroll**을 적용해 전체 개수 기반 스크롤 영역을 계산하고, **현재 뷰포트에 필요한 인덱스 구간의 데이터만 그때그때 API로 fetch**하고 메모리 캐싱한다. | Confirmed |
 | `RQ-9` | 상세 보기 | 썸네일을 클릭하면 라이트박스(상세 보기)에서 표시용 고화질 WebP 이미지, 촬영일/업로드일, 앨범, 태그, 캡션을 확인하고 이전/다음 이미지로 이동할 수 있다. | Confirmed |
 | `RQ-10` | 액자 롤링 모드 | 기본 갤러리 화면에서 **`액자 모드` 버튼**으로 전체화면 롤링 모드에 진입한다. 다음 이미지를 사전 로드(preload)한 뒤 부드러운 **Fade 전환(및 선택적 Ken Burns 효과)** 으로 표시하며, **순차 / 중복 없는 랜덤 셔플**, **전환 간격(예: 3s/5s/10s/30s)**, **일시정지/재개**, **현재 필터(전체/앨범/태그) 범위 재생**을 지원한다. | Confirmed |
-| `RQ-11` | 관리자 페이지 | `admin` 권한 전용 **`/admin` 페이지**를 제공한다. 드래그 앤 드롭 다중 이미지 업로드(클라이언트 리사이징·업로드 진행률 표시), 업로드 시 기본 앨범/태그 지정, 이미지 메타데이터(앨범·태그·캡션·촬영일) 수정, 이미지 삭제(R2 객체 + D1 레코드 동시 삭제)를 지원한다. | Confirmed |
+| `RQ-11` | 관리자 페이지 | `admin` 권한 전용 **`/admin` 페이지**를 제공한다. 드래그 앤 드롭 다중 이미지 업로드(클라이언트 리사이징·업로드 진행률 표시), 업로드 시 기본 앨범/태그 지정, 이미지 메타데이터(앨범·태그·캡션·촬영일) 수정, 다중 선택 일괄 앨범 이동·일괄 태그 추가/제거, 이미지 삭제(R2 객체 + D1 레코드 동시 삭제), 9.5 GB 무료 티어 보호 하드캡을 지원한다. | Confirmed |
 | `RQ-12` | 가입 신청/승인 | 미등록 Google 계정이 로그인을 시도하면 자동으로 **가입 신청(`pending`)** 으로 접수하고 세션은 발급하지 않은 채 승인 대기 안내 화면을 표시한다. 관리자는 `/admin`에서 대기 목록(이름·이메일·신청일시)을 보고 **승인(`viewer`/`admin`)** 또는 **거절(`rejected`)** 처리할 수 있다. | Confirmed |
 
 ---

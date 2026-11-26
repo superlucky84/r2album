@@ -340,9 +340,10 @@ Files:
   - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` & `Phase 5 — 프론트 갤러리` 완료 및 커밋 (`47141ef`).
   - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 및 커밋 (`35046b8`).
   - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 완료 및 커밋 (`119c551`).
-  - `Phase 8 — Integration Test & Cloudflare 배포 검증` 로컬 통합 테스트(`pnpm test:e2e:local`, 실제 `dist/client` + `wrangler dev` Miniflare D1/R2 통과) 및 배포 가이드(`README.md`) 작성 완료.
+  - `Phase 8 — Integration Test & Cloudflare 배포 검증` 로컬 통합 테스트(`pnpm test:e2e:local`, 실제 `dist/client` + `wrangler dev` Miniflare D1/R2 통과) 및 배포 가이드(`README.md`) 완료 (`4eaa5cd`).
+  - 추가 UX/안전 보강 완료: 다중 선택 일괄 앨범 이동·일괄 태그 추가/제거 (`POST /api/admin/images/bulk-update`, `a0c85e1`), R2 9.5 GB 무료 티어 보호 하드캡(`507 STORAGE_LIMIT_EXCEEDED`) 및 `wrangler.example.jsonc` 템플릿 분리 / `wrangler.jsonc` `.gitignore` 처리 (`9b05cc4`, 21파일 70테스트 + 로컬 Wrangler E2E 전체 통과).
 - **Next Step:**
-  - `Phase 8` 변경 사항 커밋 후 Cloudflare D1/R2 리소스 생성(`wrangler.jsonc` `database_id`·`APP_ORIGIN`·`BOOTSTRAP_ADMIN_EMAIL` 반영), Google OAuth Secrets 등록, `pnpm deploy` 및 `MANUAL_TEST_CHECKLIST.md` (`M-1`~`M-11`) 수동 검증 수행.
+  - `pnpm deploy`로 최신 변경 사항 반영 후 운영 도메인에서 `MANUAL_TEST_CHECKLIST.md` (`M-1`~`M-11`) 최종 수동 검증 및 Phase 8 `done` 마감.
 - **Blockers:**
-  - 프로덕션 배포는 사용자의 Cloudflare 계정(D1 ID, R2 버킷) 및 Google OAuth 자격 증명 설정 필요.
-- **Latest Commit SHA:** `119c551`
+  - 없음 (Cloudflare D1/R2/Secrets/OAuth 프로비저닝 및 최초 배포 완료).
+- **Latest Commit SHA:** `9b05cc4`
