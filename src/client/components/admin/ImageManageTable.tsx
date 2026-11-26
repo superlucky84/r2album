@@ -4,6 +4,7 @@ import { BULK_DELETE_MAX, CAPTION_MAX_LENGTH, CHUNK_SIZE } from '@/shared/consta
 import type { AlbumSummary, ImageItem, TagSummary } from '@/shared/types';
 import {
   bulkDeleteAdminImages,
+  bulkUpdateAdminImages,
   deleteAdminImage,
   fetchImages,
   updateAdminImage,
@@ -50,7 +51,12 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
   const searchQuery = state<string>('', renew);
   const loading = state<boolean>(false, renew);
   const errorMessage = state<string | null>(null, renew);
+  const successMessage = state<string | null>(null, renew);
   const selectedIds = state<string[]>([], renew);
+
+  const bulkAlbumTarget = state<string>('', renew);
+  const bulkTagsInput = state<string>('', renew);
+  const bulkUpdating = state<boolean>(false, renew);
 
   const editDraft = state<EditDraft | null>(null, renew);
   const savingEdit = state<boolean>(false, renew);
@@ -176,6 +182,69 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     };
   };
 
+  const handleBulkMoveAlbum = async () => {
+    if (selectedIds.value.length === 0 || !bulkAlbumTarget.value || bulkUpdating.value) return;
+
+    const targetAlbumId = bulkAlbumTarget.value === '__unassigned__' ? null : bulkAlbumTarget.value;
+    const targetAlbumName =
+      targetAlbumId === null
+        ? '미분류'
+        : (latestProps.albums.find((a) => a.id === targetAlbumId)?.name ?? '선택한 앨범');
+
+    bulkUpdating.value = true;
+    errorMessage.value = null;
+    successMessage.value = null;
+    try {
+      const res = await bulkUpdateAdminImages({
+        ids: selectedIds.value.slice(0, BULK_DELETE_MAX),
+        albumId: targetAlbumId,
+      });
+      await loadImages(offset.value);
+      latestProps.onDataChanged?.();
+      successMessage.value = `${res.updatedCount}장의 이미지를 '${targetAlbumName}'(으)로 이동했습니다.`;
+      bulkAlbumTarget.value = '';
+    } catch (err: unknown) {
+      errorMessage.value = err instanceof Error ? err.message : '일괄 앨범 이동에 실패했습니다.';
+    } finally {
+      bulkUpdating.value = false;
+    }
+  };
+
+  const handleBulkTags = async (mode: 'add' | 'remove', explicitTags?: string[]) => {
+    if (selectedIds.value.length === 0 || bulkUpdating.value) return;
+    const targetTags = explicitTags ?? parseTagsInput(bulkTagsInput.value);
+    if (targetTags.length === 0) {
+      errorMessage.value =
+        mode === 'add' ? '추가할 태그를 입력해 주세요.' : '제거할 태그를 입력해 주세요.';
+      return;
+    }
+
+    bulkUpdating.value = true;
+    errorMessage.value = null;
+    successMessage.value = null;
+    try {
+      const res = await bulkUpdateAdminImages(
+        mode === 'add'
+          ? { ids: selectedIds.value.slice(0, BULK_DELETE_MAX), addTags: targetTags }
+          : { ids: selectedIds.value.slice(0, BULK_DELETE_MAX), removeTags: targetTags }
+      );
+      await loadImages(offset.value);
+      latestProps.onDataChanged?.();
+      const label = targetTags.map((t) => `#${t}`).join(', ');
+      successMessage.value =
+        mode === 'add'
+          ? `${res.updatedCount}장의 이미지에 태그(${label})를 추가했습니다.`
+          : `${res.updatedCount}장의 이미지에서 태그(${label})를 제거했습니다.`;
+      if (!explicitTags) {
+        bulkTagsInput.value = '';
+      }
+    } catch (err: unknown) {
+      errorMessage.value = err instanceof Error ? err.message : '일괄 태그 수정에 실패했습니다.';
+    } finally {
+      bulkUpdating.value = false;
+    }
+  };
+
   const confirmDelete = async () => {
     const target = deleteModal.value;
     if (!target || deleting.value) return;
@@ -232,6 +301,18 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
       visibleItems.length > 0 && visibleItems.every((i) => selectedIds.value.includes(i.id));
     const hasPrev = offset.value > 0;
     const hasNext = offset.value + CHUNK_SIZE < total.value;
+
+    const selectedSet = new Set(selectedIds.value);
+    const selectedTagSet = new Set<string>();
+    for (const item of items.value) {
+      if (selectedSet.has(item.id)) {
+        for (const tag of item.tags) {
+          selectedTagSet.add(tag);
+        }
+      }
+    }
+    const selectedTagsList = Array.from(selectedTagSet).sort();
+    const parsedBulkTags = parseTagsInput(bulkTagsInput.value);
 
     return (
       <section data-testid="image-manage-table" class="space-y-4">
@@ -306,6 +387,131 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
             </button>
           </div>
         </div>
+
+        {selectedIds.value.length > 0 && (
+          <div
+            data-testid="bulk-action-bar"
+            class="space-y-3 rounded-2xl border border-sky-500/35 bg-sky-950/20 p-4"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="rounded-full bg-sky-500/20 px-2.5 py-1 font-semibold text-sky-200">
+                  {selectedIds.value.length}장 선택됨
+                </span>
+                <button
+                  type="button"
+                  data-testid="bulk-clear-selection"
+                  onClick={() => {
+                    selectedIds.value = [];
+                    successMessage.value = null;
+                  }}
+                  class="text-neutral-400 underline hover:text-white"
+                >
+                  선택 해제
+                </button>
+              </div>
+              <span class="text-[11px] text-neutral-400">
+                한 번에 최대 {BULK_DELETE_MAX}장까지 일괄 작업할 수 있습니다.
+              </span>
+            </div>
+
+            <div class="grid gap-3 lg:grid-cols-2">
+              {/* Bulk Album Move */}
+              <div class="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label="일괄 이동할 앨범 선택"
+                  data-testid="bulk-album-select"
+                  value={bulkAlbumTarget.value}
+                  disabled={bulkUpdating.value}
+                  onChange={(e: Event) => {
+                    bulkAlbumTarget.value = (e.target as HTMLSelectElement).value;
+                  }}
+                  class="min-w-[180px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="">이동할 앨범 선택...</option>
+                  <option value="__unassigned__">미분류로 이동</option>
+                  {props.albums.map((album) => (
+                    <option key={album.id} value={album.id}>
+                      {album.name} ({album.imageCount})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  data-testid="bulk-move-album-button"
+                  disabled={!bulkAlbumTarget.value || bulkUpdating.value}
+                  onClick={() => void handleBulkMoveAlbum()}
+                  class="rounded-xl bg-white px-3.5 py-2 text-xs font-medium text-neutral-900 transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {bulkUpdating.value ? '처리 중...' : '앨범 이동'}
+                </button>
+              </div>
+
+              {/* Bulk Add / Remove Tags */}
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  aria-label="일괄 추가 또는 제거할 태그"
+                  data-testid="bulk-tags-input"
+                  value={bulkTagsInput.value}
+                  disabled={bulkUpdating.value}
+                  onInput={(e: Event) => {
+                    bulkTagsInput.value = (e.target as HTMLInputElement).value;
+                  }}
+                  placeholder="태그 입력 (쉼표 구분, 예: 바다, 가족)"
+                  class="min-w-[180px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-sky-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  data-testid="bulk-add-tags-button"
+                  disabled={parsedBulkTags.length === 0 || bulkUpdating.value}
+                  onClick={() => void handleBulkTags('add')}
+                  class="rounded-xl border border-emerald-600/60 bg-emerald-950/60 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  태그 추가
+                </button>
+                <button
+                  type="button"
+                  data-testid="bulk-remove-tags-button"
+                  disabled={parsedBulkTags.length === 0 || bulkUpdating.value}
+                  onClick={() => void handleBulkTags('remove')}
+                  class="rounded-xl border border-amber-600/60 bg-amber-950/60 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-900/70 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  태그 제거
+                </button>
+              </div>
+            </div>
+
+            {selectedTagsList.length > 0 && (
+              <div class="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+                <span class="text-neutral-400">선택된 사진의 태그 (클릭하여 일괄 제거):</span>
+                {selectedTagsList.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    disabled={bulkUpdating.value}
+                    data-testid={`bulk-quick-remove-tag-${tag}`}
+                    onClick={() => void handleBulkTags('remove', [tag])}
+                    class="inline-flex items-center gap-1 rounded-full border border-sky-700/60 bg-sky-950/70 px-2.5 py-0.5 text-sky-200 transition hover:border-rose-500/60 hover:bg-rose-950/60 hover:text-rose-200 disabled:opacity-40"
+                  >
+                    <span>#{tag}</span>
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {successMessage.value && (
+          <div
+            role="status"
+            data-testid="manage-success"
+            class="rounded-xl border border-emerald-500/40 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-200"
+          >
+            {successMessage.value}
+          </div>
+        )}
 
         {errorMessage.value && (
           <div

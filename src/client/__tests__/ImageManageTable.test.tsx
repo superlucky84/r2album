@@ -181,4 +181,106 @@ describe('ImageManageTable component', () => {
     expect(screen.queryByTestId('image-row-img-11111111')).toBeNull();
     expect(screen.queryByTestId('image-row-img-22222222')).toBeNull();
   });
+
+  it('supports bulk album move and bulk tag add/remove via bulk-action bar', async () => {
+    let store = SAMPLE_ITEMS.map((item) => ({ ...item, tags: [...item.tags] }));
+    const onDataChanged = vi.fn();
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+
+      if (url.startsWith('/api/images') && method === 'GET') {
+        return new Response(
+          JSON.stringify({ total: store.length, offset: 0, limit: 40, items: store }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url === '/api/admin/images/bulk-update' && method === 'POST') {
+        const body = JSON.parse(String(init?.body)) as {
+          ids: string[];
+          albumId?: string | null;
+          addTags?: string[];
+          removeTags?: string[];
+        };
+        const idSet = new Set(body.ids);
+        store = store.map((item) => {
+          if (!idSet.has(item.id)) return item;
+          let nextAlbumId = item.albumId;
+          let nextAlbumName = item.albumName;
+          if ('albumId' in body) {
+            nextAlbumId = body.albumId ?? null;
+            nextAlbumName =
+              body.albumId === 'alb-1'
+                ? '제주 여행'
+                : body.albumId === null
+                  ? null
+                  : item.albumName;
+          }
+          const tagSet = new Set(item.tags);
+          for (const t of body.removeTags ?? []) tagSet.delete(t);
+          for (const t of body.addTags ?? []) tagSet.add(t);
+          return {
+            ...item,
+            albumId: nextAlbumId,
+            albumName: nextAlbumName,
+            tags: Array.from(tagSet).sort(),
+          };
+        });
+        return new Response(
+          JSON.stringify({ ok: true, updatedIds: body.ids, updatedCount: body.ids.length }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+
+    render(<ImageManageTable albums={ALBUMS} tags={TAGS} onDataChanged={onDataChanged} />);
+    await flush();
+
+    // Select both images -> bulk-action-bar appears
+    await act(() => {
+      fireEvent.click(screen.getByTestId('manage-select-all'));
+    });
+    expect(screen.getByTestId('bulk-action-bar')).toBeTruthy();
+
+    // 1. Move both to '제주 여행'
+    await act(() => {
+      fireEvent.change(screen.getByTestId('bulk-album-select'), { target: { value: 'alb-1' } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('bulk-move-album-button'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId('image-row-img-22222222').textContent).toContain('제주 여행');
+    expect(screen.getByTestId('manage-success').textContent).toContain('제주 여행');
+
+    // 2. Add tags '가족, 추억' to selected images
+    await act(() => {
+      fireEvent.input(screen.getByTestId('bulk-tags-input'), { target: { value: '가족, 추억' } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('bulk-add-tags-button'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId('image-row-img-11111111').textContent).toContain('#가족');
+    expect(screen.getByTestId('image-row-img-22222222').textContent).toContain('#추억');
+
+    // 3. Quick-remove tag '#바다' via selected tag pill
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('bulk-quick-remove-tag-바다'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByTestId('image-row-img-11111111').textContent).not.toContain('#바다');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/images/bulk-update',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(onDataChanged).toHaveBeenCalledTimes(3);
+  });
 });

@@ -126,6 +126,13 @@ describe('Phase 7 Security Hardening (Auth, RBAC, R2 Path Safety)', () => {
       ['PATCH', { headers: jsonHeaders, body: JSON.stringify({ caption: 'hack' }) }],
       ['DELETE', { headers: viewerHeaders }],
       ['POST', { headers: jsonHeaders, body: JSON.stringify({ ids: ['12345678-abcd'] }) }],
+      [
+        'POST',
+        {
+          headers: jsonHeaders,
+          body: JSON.stringify({ ids: ['12345678-abcd'], addTags: ['hack'] }),
+        },
+      ],
       ['POST', { headers: jsonHeaders, body: JSON.stringify({ name: 'Hack Album' }) }],
       ['PATCH', { headers: jsonHeaders, body: JSON.stringify({ name: 'Renamed' }) }],
       ['DELETE', { headers: viewerHeaders }],
@@ -141,6 +148,7 @@ describe('Phase 7 Security Hardening (Auth, RBAC, R2 Path Safety)', () => {
       '/api/admin/images/12345678-abcd',
       '/api/admin/images/12345678-abcd',
       '/api/admin/images/bulk-delete',
+      '/api/admin/images/bulk-update',
       '/api/admin/albums',
       '/api/admin/albums/album-1234',
       '/api/admin/albums/album-1234',

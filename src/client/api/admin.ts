@@ -103,12 +103,32 @@ export function deleteAdminImage(id: string): Promise<{ ok: true; deletedId: str
   });
 }
 
+export interface BulkUpdateImagesPayload {
+  ids: string[];
+  albumId?: string | null;
+  addTags?: string[];
+  removeTags?: string[];
+}
+
 export function bulkDeleteAdminImages(ids: string[]): Promise<{ ok: true; deletedIds: string[] }> {
   return apiFetch<{ ok: true; deletedIds: string[] }>('/api/admin/images/bulk-delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids }),
   });
+}
+
+export function bulkUpdateAdminImages(
+  payload: BulkUpdateImagesPayload
+): Promise<{ ok: true; updatedIds: string[]; updatedCount: number }> {
+  return apiFetch<{ ok: true; updatedIds: string[]; updatedCount: number }>(
+    '/api/admin/images/bulk-update',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export function createAdminAlbum(body: {

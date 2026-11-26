@@ -4,6 +4,7 @@ import {
   BULK_DELETE_MAX,
   DISPLAY_MAX_BYTES,
   R2_FREE_TIER_BYTES,
+  TAG_MAX_COUNT,
   THUMB_MAX_BYTES,
 } from '../../shared/constants';
 import type {
@@ -433,6 +434,137 @@ export function createAdminRoutes() {
     await c.env.MEDIA_BUCKET.delete(r2Keys);
 
     return c.json({ ok: true, deletedIds: foundIds });
+  });
+
+  // --- Image Bulk Update (Move Album / Add or Remove Tags) ---
+  admin.post('/api/admin/images/bulk-update', async (c) => {
+    const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!body || !Array.isArray(body.ids) || body.ids.length === 0) {
+      throw new ApiError(400, 'INVALID_IDS', 'ids must be a non-empty array');
+    }
+    if (body.ids.length > BULK_DELETE_MAX) {
+      throw new ApiError(
+        400,
+        'TOO_MANY_IDS',
+        `At most ${BULK_DELETE_MAX} images can be updated per request`
+      );
+    }
+
+    const uniqueIds = Array.from(
+      new Set(
+        body.ids.map((raw) => {
+          if (typeof raw !== 'string' || !isValidImageId(raw)) {
+            throw new ApiError(400, 'INVALID_IMAGE_ID', 'Invalid image ID in list');
+          }
+          return raw;
+        })
+      )
+    );
+
+    const hasAlbumChange = 'albumId' in body && body.albumId !== undefined;
+    const addTags = 'addTags' in body ? normalizeTags(body.addTags) : [];
+    const removeTags = 'removeTags' in body ? normalizeTags(body.removeTags) : [];
+
+    if (!hasAlbumChange && addTags.length === 0 && removeTags.length === 0) {
+      throw new ApiError(
+        400,
+        'NO_BULK_ACTION',
+        'At least one of albumId, addTags, or removeTags must be provided'
+      );
+    }
+
+    const db = c.env.DB;
+    let nextAlbumId: string | null = null;
+    if (hasAlbumChange) {
+      if (body.albumId === null || body.albumId === '') {
+        nextAlbumId = null;
+      } else if (typeof body.albumId === 'string') {
+        const trimmed = body.albumId.trim();
+        const foundAlbum = await db
+          .prepare('SELECT id FROM albums WHERE id = ?')
+          .bind(trimmed)
+          .first<{ id: string }>();
+        if (!foundAlbum) {
+          throw new ApiError(400, 'ALBUM_NOT_FOUND', 'Specified album does not exist');
+        }
+        nextAlbumId = foundAlbum.id;
+      } else {
+        throw new ApiError(400, 'INVALID_ALBUM_ID', 'albumId must be a string or null');
+      }
+    }
+
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const { results } = await db
+      .prepare(`SELECT id FROM images WHERE id IN (${placeholders})`)
+      .bind(...uniqueIds)
+      .all<{ id: string }>();
+
+    const foundIds = (results ?? []).map((r) => r.id);
+    if (foundIds.length === 0) {
+      return c.json({ ok: true, updatedIds: [], updatedCount: 0 });
+    }
+
+    // Validate per-image tag count ceiling before writing when adding tags
+    if (addTags.length > 0) {
+      const existingTagsMap = await fetchTagsByImageIds(db, foundIds);
+      const removeSet = new Set(removeTags);
+      for (const imageId of foundIds) {
+        const merged = new Set(
+          (existingTagsMap.get(imageId) ?? []).filter((t) => !removeSet.has(t))
+        );
+        for (const t of addTags) {
+          merged.add(t);
+        }
+        if (merged.size > TAG_MAX_COUNT) {
+          throw new ApiError(
+            400,
+            'TOO_MANY_TAGS',
+            `Adding tags would exceed the maximum of ${TAG_MAX_COUNT} tags per image`
+          );
+        }
+      }
+    }
+
+    const foundPlaceholders = foundIds.map(() => '?').join(', ');
+
+    if (hasAlbumChange) {
+      await db
+        .prepare(`UPDATE images SET album_id = ? WHERE id IN (${foundPlaceholders})`)
+        .bind(nextAlbumId, ...foundIds)
+        .run();
+    }
+
+    if (removeTags.length > 0) {
+      const tagPlaceholders = removeTags.map(() => '?').join(', ');
+      await db
+        .prepare(
+          `DELETE FROM image_tags
+           WHERE image_id IN (${foundPlaceholders})
+             AND tag_id IN (SELECT id FROM tags WHERE name IN (${tagPlaceholders}))`
+        )
+        .bind(...foundIds, ...removeTags)
+        .run();
+    }
+
+    if (addTags.length > 0) {
+      for (const tagName of addTags) {
+        await db.prepare('INSERT OR IGNORE INTO tags (name) VALUES (?)').bind(tagName).run();
+        const tagRow = await db
+          .prepare('SELECT id FROM tags WHERE name = ?')
+          .bind(tagName)
+          .first<{ id: number }>();
+        if (tagRow) {
+          for (const imageId of foundIds) {
+            await db
+              .prepare('INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES (?, ?)')
+              .bind(imageId, tagRow.id)
+              .run();
+          }
+        }
+      }
+    }
+
+    return c.json({ ok: true, updatedIds: foundIds, updatedCount: foundIds.length });
   });
 
   // --- Albums CRUD ---

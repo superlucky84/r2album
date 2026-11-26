@@ -328,4 +328,122 @@ describe('Phase 3 API: media streaming, images range/filter & admin CRUD', () =>
     expect(delMom.status).toBe(200);
     expect((await app.request('/api/filters', { headers: momHeaders }, env)).status).toBe(401);
   });
+
+  it('supports bulk album move (including unassigned) and bulk tag add/remove', async () => {
+    const app = createApp();
+    const { env } = createTestEnv();
+    const adminHeaders = await makeAuthHeader('owner@example.com', 'admin', 'Owner');
+    const jsonHeaders = { ...adminHeaders, 'Content-Type': 'application/json' };
+
+    const albRes = await app.request(
+      '/api/admin/albums',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ name: 'Family 2026' }),
+      },
+      env
+    );
+    const album = (await albRes.json()) as AlbumSummary;
+
+    // Upload 2 unassigned images with different initial tags
+    const img1 = (await (
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({ metadata: { caption: 'One', tags: ['sea', 'old'] } }),
+        },
+        env
+      )
+    ).json()) as ImageItem;
+    const img2 = (await (
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({ metadata: { caption: 'Two', tags: ['old'] } }),
+        },
+        env
+      )
+    ).json()) as ImageItem;
+
+    // 1. Bulk move both to album + add tags ['summer', 'family']
+    const moveRes = await app.request(
+      '/api/admin/images/bulk-update',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          ids: [img1.id, img2.id],
+          albumId: album.id,
+          addTags: ['Summer', 'family'],
+        }),
+      },
+      env
+    );
+    expect(moveRes.status).toBe(200);
+    expect(await moveRes.json()).toMatchObject({ ok: true, updatedCount: 2 });
+
+    const afterAdd = (await (
+      await app.request('/api/images?offset=0&limit=10', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    const byIdAfterAdd = new Map(afterAdd.items.map((i) => [i.id, i]));
+    expect(byIdAfterAdd.get(img1.id)?.albumId).toBe(album.id);
+    expect(byIdAfterAdd.get(img2.id)?.albumId).toBe(album.id);
+    expect(byIdAfterAdd.get(img1.id)?.tags).toEqual(['family', 'old', 'sea', 'summer']);
+    expect(byIdAfterAdd.get(img2.id)?.tags).toEqual(['family', 'old', 'summer']);
+
+    // 2. Bulk remove tag 'old' and move back to unassigned (null)
+    const removeRes = await app.request(
+      '/api/admin/images/bulk-update',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          ids: [img1.id, img2.id],
+          albumId: null,
+          removeTags: ['OLD'],
+        }),
+      },
+      env
+    );
+    expect(removeRes.status).toBe(200);
+
+    const afterRemove = (await (
+      await app.request('/api/images?offset=0&limit=10', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    const byIdAfterRemove = new Map(afterRemove.items.map((i) => [i.id, i]));
+    expect(byIdAfterRemove.get(img1.id)?.albumId).toBeNull();
+    expect(byIdAfterRemove.get(img2.id)?.albumId).toBeNull();
+    expect(byIdAfterRemove.get(img1.id)?.tags).toEqual(['family', 'sea', 'summer']);
+    expect(byIdAfterRemove.get(img2.id)?.tags).toEqual(['family', 'summer']);
+
+    // 3. Reject empty action & non-existent album
+    expect(
+      (
+        await app.request(
+          '/api/admin/images/bulk-update',
+          { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ ids: [img1.id] }) },
+          env
+        )
+      ).status
+    ).toBe(400);
+
+    expect(
+      (
+        await app.request(
+          '/api/admin/images/bulk-update',
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({ ids: [img1.id], albumId: 'non-existent-album' }),
+          },
+          env
+        )
+      ).status
+    ).toBe(400);
+  });
 });
