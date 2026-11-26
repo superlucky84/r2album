@@ -114,6 +114,7 @@ export interface AdminStatsResponse {
   totalThumbBytes: number;
   totalBytes: number;
   freeTierBytes: number;
+  storageCapBytes?: number;
   usageRatio: number;
   pendingUsers: number;
 }

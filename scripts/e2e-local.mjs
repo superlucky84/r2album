@@ -9,6 +9,9 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
+const WRANGLER_CONFIG = existsSync(resolve(ROOT, 'wrangler.jsonc'))
+  ? resolve(ROOT, 'wrangler.jsonc')
+  : resolve(ROOT, 'wrangler.example.jsonc');
 const PORT = 8799;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
 const PERSIST_DIR = resolve(ROOT, `.wrangler/e2e-tmp-${process.pid}`);
@@ -109,7 +112,19 @@ async function main() {
   // 1. Apply D1 migrations into isolated local Miniflare state
   const migrate = spawnSync(
     'pnpm',
-    ['exec', 'wrangler', 'd1', 'migrations', 'apply', 'r2album-db', '--local', '--persist-to', PERSIST_DIR],
+    [
+      'exec',
+      'wrangler',
+      'd1',
+      'migrations',
+      'apply',
+      'r2album-db',
+      '--config',
+      WRANGLER_CONFIG,
+      '--local',
+      '--persist-to',
+      PERSIST_DIR,
+    ],
     { cwd: ROOT, stdio: 'pipe', encoding: 'utf8' }
   );
   if (migrate.status !== 0) {
@@ -123,6 +138,8 @@ async function main() {
       'exec',
       'wrangler',
       'dev',
+      '--config',
+      WRANGLER_CONFIG,
       '--local',
       '--port',
       String(PORT),

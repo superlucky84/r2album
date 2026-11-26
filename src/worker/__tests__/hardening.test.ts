@@ -375,4 +375,51 @@ describe('Phase 7 Upload & Data Integrity Hardening', () => {
     // None of the rejected uploads wrote anything into R2
     expect(r2Store.size).toBe(0);
   });
+
+  it('enforces R2 free-tier storage hard cap (507 STORAGE_LIMIT_EXCEEDED) and recovers after deletion', async () => {
+    const app = createApp();
+    const { env, r2Store } = createTestEnv();
+    const adminHeaders = await makeAuthHeader('owner@example.com', 'admin');
+
+    // Configure a tight cap that allows exactly 1 small upload (each upload is ~43 bytes)
+    const cappedEnv = { ...env, MAX_STORAGE_BYTES: '60' };
+
+    const firstRes = await app.request(
+      '/api/admin/images',
+      { method: 'POST', headers: adminHeaders, body: buildUploadForm({}) },
+      cappedEnv
+    );
+    expect(firstRes.status).toBe(201);
+    const first = (await firstRes.json()) as { id: string };
+    expect(r2Store.size).toBe(2);
+
+    // Second upload exceeds MAX_STORAGE_BYTES -> 507 STORAGE_LIMIT_EXCEEDED, zero extra R2 writes
+    const secondRes = await app.request(
+      '/api/admin/images',
+      { method: 'POST', headers: adminHeaders, body: buildUploadForm({}) },
+      cappedEnv
+    );
+    expect(secondRes.status).toBe(507);
+    expect(((await secondRes.json()) as { error: { code: string } }).error.code).toBe(
+      'STORAGE_LIMIT_EXCEEDED'
+    );
+    expect(r2Store.size).toBe(2);
+
+    // Deleting the first image frees space and allows uploading again
+    const delRes = await app.request(
+      `/api/admin/images/${first.id}`,
+      { method: 'DELETE', headers: adminHeaders },
+      cappedEnv
+    );
+    expect(delRes.status).toBe(200);
+    expect(r2Store.size).toBe(0);
+
+    const retryRes = await app.request(
+      '/api/admin/images',
+      { method: 'POST', headers: adminHeaders, body: buildUploadForm({}) },
+      cappedEnv
+    );
+    expect(retryRes.status).toBe(201);
+    expect(r2Store.size).toBe(2);
+  });
 });

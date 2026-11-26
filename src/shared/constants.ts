@@ -10,6 +10,7 @@ export const THUMB_WEBP_QUALITY = 0.75;
 export const THUMB_MAX_BYTES = 512 * 1024; // 512 KB
 
 export const R2_FREE_TIER_BYTES = 10 * 1024 * 1024 * 1024; // 10 GiB
+export const R2_STORAGE_HARD_CAP_BYTES = 9_500_000_000; // 9.5 GB decimal safety cap (< 10 GB free tier)
 export const UPLOAD_CONCURRENCY = 3;
 export const BULK_DELETE_MAX = 50;
 

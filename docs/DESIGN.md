@@ -269,6 +269,7 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
   - Vars (`wrangler.jsonc`): `BOOTSTRAP_ADMIN_EMAIL`, `APP_ORIGIN` (로컬/프로덕션 OAuth 리다이렉트 기준)
 - **업로드 안전 제한:**
   - Worker에서 파일당 `display <= 5MB`, `thumb <= 512KB`, MIME 타입 `image/webp` 매직 바이트(`RIFF....WEBP`) 검증.
+  - **무료 티어 과금 방지 하드캡:** R2 누적 저장 용량이 안전 한도(`9.5 GB` / `9,500,000,000 bytes`, `MAX_STORAGE_BYTES`로 조정 가능)를 초과하는 업로드는 R2 쓰기 전에 `507 STORAGE_LIMIT_EXCEEDED`로 즉시 차단.
   - `caption <= 500자`, `tags <= 20개`(각 30자 이내), `albumName <= 60자`.
 - **파괴적 작업 보호:**
   - 이미지 단건/일괄 삭제, 앨범 삭제, 허용 사용자 삭제는 관리자 UI에서 명시적 확인 모달을 거친다.

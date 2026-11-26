@@ -38,8 +38,11 @@ Cloudflare R2(무료 10GB, 송신 트래픽 무료) + Cloudflare D1 + Cloudflare
 
 ```bash
 pnpm install
+cp wrangler.example.jsonc wrangler.jsonc
 cp .dev.vars.example .dev.vars
 ```
+
+(`wrangler.jsonc`와 `.dev.vars`는 개인 D1 ID·이메일·시크릿 보호를 위해 `.gitignore`에 등록되어 있습니다.)
 
 `.dev.vars` 파일에 로컬 테스트용 Google OAuth 자격 증명과 세션 시크릿을 입력합니다. (`.dev.vars`는 `.gitignore`에 포함되어 있으며 절대 커밋하지 마세요.)
 

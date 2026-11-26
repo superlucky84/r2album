@@ -5,11 +5,12 @@ node_modules/
 dist/
 .wrangler/
 
-# Secrets (never commit)
+# Secrets & local deployment config (never commit)
 .dev.vars
 .env
 .env.*
 !.dev.vars.example
+wrangler.jsonc
 
 # OS & Editor
 .DS_Store

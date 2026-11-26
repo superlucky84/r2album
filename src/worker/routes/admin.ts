@@ -4,6 +4,7 @@ import {
   BULK_DELETE_MAX,
   DISPLAY_MAX_BYTES,
   R2_FREE_TIER_BYTES,
+  R2_STORAGE_HARD_CAP_BYTES,
   TAG_MAX_COUNT,
   THUMB_MAX_BYTES,
 } from '../../shared/constants';
@@ -97,12 +98,20 @@ function isFileLike(val: unknown): val is File {
   );
 }
 
+function resolveStorageHardCapBytes(raw: string | undefined): number {
+  if (!raw) return R2_STORAGE_HARD_CAP_BYTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return R2_STORAGE_HARD_CAP_BYTES;
+  return Math.floor(parsed);
+}
+
 export function createAdminRoutes() {
   const admin = new Hono<AppEnv>();
 
   // --- Stats ---
   admin.get('/api/admin/stats', async (c) => {
     const db = c.env.DB;
+    const storageCapBytes = resolveStorageHardCapBytes(c.env.MAX_STORAGE_BYTES);
     const [imgStats, pendingRow] = await Promise.all([
       db
         .prepare(
@@ -131,6 +140,7 @@ export function createAdminRoutes() {
       totalThumbBytes,
       totalBytes,
       freeTierBytes: R2_FREE_TIER_BYTES,
+      storageCapBytes,
       usageRatio: totalBytes / R2_FREE_TIER_BYTES,
       pendingUsers: Number(pendingRow?.count ?? 0),
     };
@@ -214,6 +224,21 @@ export function createAdminRoutes() {
       typeof meta.albumId === 'string' && meta.albumId.trim() ? meta.albumId.trim() : null;
 
     const db = c.env.DB;
+    const storageCapBytes = resolveStorageHardCapBytes(c.env.MAX_STORAGE_BYTES);
+    const usageRow = await db
+      .prepare('SELECT COALESCE(SUM(display_bytes + thumb_bytes), 0) AS total_bytes FROM images')
+      .first<{ total_bytes: number }>();
+    const currentTotalBytes = Number(usageRow?.total_bytes ?? 0);
+    const incomingBytes = displayBytes.byteLength + thumbBytes.byteLength;
+
+    if (currentTotalBytes + incomingBytes > storageCapBytes) {
+      throw new ApiError(
+        507,
+        'STORAGE_LIMIT_EXCEEDED',
+        'R2 무료 티어 안전 용량 한도(9.5 GB)에 도달해 업로드를 차단했습니다. 기존 사진을 정리한 뒤 다시 시도해 주세요.'
+      );
+    }
+
     if (albumId) {
       const albumExists = await db
         .prepare('SELECT id FROM albums WHERE id = ?')

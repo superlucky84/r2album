@@ -1,4 +1,5 @@
 import { lmount } from 'lithent';
+import { R2_STORAGE_HARD_CAP_BYTES } from '@/shared/constants';
 import type { AdminStatsResponse } from '@/shared/types';
 import { formatBytes, formatGigabytes } from '@/client/lib/format';
 
@@ -10,8 +11,10 @@ export interface StorageGaugeProps {
 export const StorageGauge = lmount<StorageGaugeProps>(() => {
   return ({ stats, loading }) => {
     const percent = stats ? Math.min(100, Math.max(0, stats.usageRatio * 100)) : 0;
+    const capBytes = stats?.storageCapBytes ?? R2_STORAGE_HARD_CAP_BYTES;
+    const isAtCap = stats ? stats.totalBytes >= capBytes : false;
     const barColor =
-      percent >= 90 ? 'bg-rose-500' : percent >= 75 ? 'bg-amber-500' : 'bg-emerald-500';
+      isAtCap || percent >= 90 ? 'bg-rose-500' : percent >= 75 ? 'bg-amber-500' : 'bg-emerald-500';
 
     return (
       <section
@@ -70,6 +73,20 @@ export const StorageGauge = lmount<StorageGaugeProps>(() => {
             style={{ width: `${percent}%` }}
           />
         </div>
+
+        <p class="mt-2 text-xs text-neutral-400">
+          {isAtCap ? (
+            <span class="font-medium text-rose-400">
+              무료 티어 보호 한도(9.5 GB)에 도달하여 새 업로드가 차단되어 있습니다. 기존 사진을
+              삭제해 공간을 확보해 주세요.
+            </span>
+          ) : (
+            <span>
+              과금 방지 보호: 저장 용량이 9.5 GB({formatGigabytes(capBytes)})에 도달하면 업로드가
+              자동 차단됩니다.
+            </span>
+          )}
+        </p>
       </section>
     );
   };

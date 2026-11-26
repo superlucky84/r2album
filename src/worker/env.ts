@@ -9,4 +9,5 @@ export interface WorkerBindings {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
+  MAX_STORAGE_BYTES?: string;
 }
