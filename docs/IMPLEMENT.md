@@ -276,7 +276,7 @@ Files:
 
 ---
 
-## Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강): pending
+## Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강): done
 
 Refs: RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-4, DC-7, DC-8, M-2, M-3, M-6, M-8
 
@@ -284,16 +284,21 @@ Refs: RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-4, DC-7, DC-8, M-2, M-3, M-6, M-8
 - Phase 1 ~ Phase 6 기능 구현 및 기본 테스트 모두 완료.
 
 ### Implementation Checklist
-- [ ] **보안 회귀 테스트 보강:** 변조/만료 쿠키, `viewer`의 모든 `/api/admin/*` 엔드포인트 접근, 존재하지 않는/삭제된 R2 키 요청, Path traversal 형태의 `:id` 입력 차단 테스트 추가.
-- [ ] **업로드/데이터 정합성 장애 테스트:** R2 성공 후 D1 실패 롤백, 0바이트/비-WebP 위조 파일, 500자 초과 캡션, 50건 초과 일괄 삭제, `BOOTSTRAP_ADMIN_EMAIL` 자기 삭제 차단 테스트 추가.
-- [ ] **Virtual Scroll & PhotoFrame 스트레스 테스트:** 30,000건 모의 데이터 급스크롤(DOM 상한 및 stale fetch 차단), 0장/1장 앨범에서 액자 모드 진입, 네트워크 오류 연속 발생 시 복구 테스트 추가.
-- [ ] **코드 품질 게이트:** `pnpm type-check`, `pnpm lint`, `pnpm format:check`, 전체 Vitest 스위트 100% 통과 확인.
+- [x] **보안 회귀 테스트 보강:** 변조/만료 쿠키, `viewer`의 모든 `/api/admin/*` 엔드포인트 접근, 존재하지 않는/삭제된 R2 키 요청, Path traversal 형태의 `:id` 입력 차단 테스트 추가.
+- [x] **업로드/데이터 정합성 장애 테스트:** R2 성공 후 D1 실패 롤백, 0바이트/비-WebP 위조 파일, 500자 초과 캡션, 50건 초과 일괄 삭제, `BOOTSTRAP_ADMIN_EMAIL` 자기 삭제 차단 테스트 추가.
+- [x] **Virtual Scroll & PhotoFrame 스트레스 테스트:** 30,000건 모의 데이터 급스크롤(DOM 상한 및 stale fetch 차단), 0장/1장 앨범에서 액자 모드 진입, 네트워크 오류 연속 발생 시 복구 테스트 추가.
+- [x] **코드 품질 게이트:** `pnpm type-check`, `pnpm lint`, `pnpm format:check`, 전체 Vitest 스위트 100% 통과 확인.
 
 ### Baseline Tests
 - 전체 단위/컴포넌트/Worker 테스트 스위트 일괄 실행 및 0 실패 확인.
 
 ### Exit Criteria
 - 보안·경계·오류 복구 케이스가 자동화 테스트로 고정되고 모든 정적 검사 및 테스트가 통과한다.
+
+Files:
+- `docs/IMPLEMENT.md` (modified)
+- `src/client/__tests__/hardening.test.tsx` (added)
+- `src/worker/__tests__/hardening.test.ts` (added)
 
 ---
 
@@ -327,9 +332,10 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
   - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 및 커밋·푸시 (`ba503d5`).
   - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 및 커밋·푸시 (`ae8cfa7`).
   - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` & `Phase 5 — 프론트 갤러리` 완료 및 커밋 (`47141ef`).
-  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 (미커밋 상태; 19파일 59건 테스트 통과).
+  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 및 커밋 (`35046b8`).
+  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 완료 (미커밋 상태; 21파일 67건 테스트 전체 통과).
 - **Next Step:**
-  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 진행.
+  - `Phase 7` 커밋 후 `Phase 8 — Integration Test & Cloudflare 배포 검증` 진행 (로컬 통합 테스트 + 배포 가이드 `README.md` + Cloudflare 리소스/배포 검증).
 - **Blockers:**
   - 없음.
-- **Latest Commit SHA:** `47141ef`
+- **Latest Commit SHA:** `35046b8`
