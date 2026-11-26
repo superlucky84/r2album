@@ -302,7 +302,7 @@ Files:
 
 ---
 
-## Phase 8 — Integration Test & Cloudflare 배포 검증: pending
+## Phase 8 — Integration Test & Cloudflare 배포 검증: in_progress
 
 Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-4, M-5, M-6, M-7, M-8, M-9, M-10
 
@@ -311,16 +311,22 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
 - Cloudflare 계정(R2 버킷, D1 DB) 및 Google Cloud Console OAuth 2.0 클라이언트 자격 증명 준비.
 
 ### Implementation Checklist
-- [ ] 로컬 통합 테스트(실제 빌드된 `dist/client` + `wrangler dev` Miniflare D1/R2 환경에서 Playwright 또는 E2E 시나리오로 인증(테스트용 모의 콜백 포함) → 업로드 → 가상 스크롤 조회 → 필터 → 라이트박스 → 액자 모드 → 삭제 전체 흐름 검증).
-- [ ] Cloudflare 리소스 생성 및 배포 가이드(`README.md`) 정리: D1 원격 마이그레이션, R2 버킷 생성, Secrets(`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`) 등록, Google OAuth Authorized Redirect URI 설정.
-- [ ] Cloudflare Workers 프로덕션(또는 스테이징) 배포 후 `MANUAL_TEST_CHECKLIST.md` (`M-1` ~ `M-10`) 전 항목 수동 검증 및 결과 기록.
+- [x] 로컬 통합 테스트(실제 빌드된 `dist/client` + `wrangler dev` Miniflare D1/R2 환경에서 `scripts/e2e-local.mjs` / `pnpm test:e2e:local`로 SPA 라우팅, OAuth PKCE 리다이렉트, 인증, 업로드, 가상 스크롤 구간 조회, 필터, Private R2 `ETag`/304, 액자 ID, RBAC, 삭제·권한 철회 전체 흐름 검증).
+- [x] Cloudflare 리소스 생성 및 배포 가이드(`README.md`) 정리: D1 원격 마이그레이션, R2 버킷 생성, Secrets(`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`) 등록, Google OAuth Authorized Redirect URI 설정.
+- [ ] Cloudflare Workers 프로덕션(또는 스테이징) 배포 후 `MANUAL_TEST_CHECKLIST.md` (`M-1` ~ `M-11`) 전 항목 수동 검증 및 결과 기록.
 
 ### Baseline Tests
-- 로컬 빌드 + Wrangler E2E 통합 테스트 스위트 통과.
-- 프로덕션/스테이징 배포 후 `M-1` ~ `M-10` 수동 체크리스트 전 항목 Pass.
+- 로컬 빌드 + Wrangler E2E 통합 테스트 스위트 통과 (`pnpm test:e2e:local`).
+- 프로덕션/스테이징 배포 후 `M-1` ~ `M-11` 수동 체크리스트 전 항목 Pass (운영 자격 증명 등록 후 수행).
 
 ### Exit Criteria
 - 실제 Cloudflare 도메인에서 Google OAuth 로그인, Private R2 서빙, WebP 업로드, 가상 스크롤, 전체화면 액자 롤링이 모두 통과하고 릴리스 준비가 완료된다.
+
+Files:
+- `README.md` (added)
+- `docs/IMPLEMENT.md` (modified)
+- `package.json` (modified)
+- `scripts/e2e-local.mjs` (added)
 
 ---
 
@@ -333,9 +339,10 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
   - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 및 커밋·푸시 (`ae8cfa7`).
   - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` & `Phase 5 — 프론트 갤러리` 완료 및 커밋 (`47141ef`).
   - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 및 커밋 (`35046b8`).
-  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 완료 (미커밋 상태; 21파일 67건 테스트 전체 통과).
+  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 완료 및 커밋 (`119c551`).
+  - `Phase 8 — Integration Test & Cloudflare 배포 검증` 로컬 통합 테스트(`pnpm test:e2e:local`, 실제 `dist/client` + `wrangler dev` Miniflare D1/R2 통과) 및 배포 가이드(`README.md`) 작성 완료.
 - **Next Step:**
-  - `Phase 7` 커밋 후 `Phase 8 — Integration Test & Cloudflare 배포 검증` 진행 (로컬 통합 테스트 + 배포 가이드 `README.md` + Cloudflare 리소스/배포 검증).
+  - `Phase 8` 변경 사항 커밋 후 Cloudflare D1/R2 리소스 생성(`wrangler.jsonc` `database_id`·`APP_ORIGIN`·`BOOTSTRAP_ADMIN_EMAIL` 반영), Google OAuth Secrets 등록, `pnpm deploy` 및 `MANUAL_TEST_CHECKLIST.md` (`M-1`~`M-11`) 수동 검증 수행.
 - **Blockers:**
-  - 없음.
-- **Latest Commit SHA:** `35046b8`
+  - 프로덕션 배포는 사용자의 Cloudflare 계정(D1 ID, R2 버킷) 및 Google OAuth 자격 증명 설정 필요.
+- **Latest Commit SHA:** `119c551`
