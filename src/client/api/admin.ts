@@ -4,6 +4,7 @@ import type {
   AlbumSummary,
   AllowedUserRecord,
   FiltersResponse,
+  FrameIdsResponse,
   ImageItem,
   ImagesRangeResponse,
   UserApprovalStatus,
@@ -62,6 +63,18 @@ export function fetchImages(
 
   const qs = query.toString();
   return apiFetch<ImagesRangeResponse>(qs ? `/api/images?${qs}` : '/api/images', { signal });
+}
+
+export function fetchFrameIds(
+  params: { albumId?: string; tag?: string } = {},
+  signal?: AbortSignal
+): Promise<FrameIdsResponse> {
+  const query = new URLSearchParams();
+  if (params.albumId) query.set('albumId', params.albumId);
+  if (params.tag) query.set('tag', params.tag);
+
+  const qs = query.toString();
+  return apiFetch<FrameIdsResponse>(qs ? `/api/images/ids?${qs}` : '/api/images/ids', { signal });
 }
 
 export function uploadAdminImage(payload: UploadImagePayload): Promise<ImageItem> {

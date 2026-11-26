@@ -1,1 +1,15 @@
 @import 'tailwindcss';
+
+@keyframes r2-ken-burns {
+  0% {
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  100% {
+    transform: scale(1.07) translate3d(0, -1%, 0);
+  }
+}
+
+.r2-ken-burns-active {
+  animation: r2-ken-burns 14s ease-out forwards;
+  will-change: transform;
+}

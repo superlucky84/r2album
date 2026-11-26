@@ -241,7 +241,7 @@ Files:
 
 ---
 
-## Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode): pending
+## Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode): done
 
 Refs: RQ-2, RQ-10, DC-8, DC-9, M-8
 
@@ -249,8 +249,8 @@ Refs: RQ-2, RQ-10, DC-8, DC-9, M-8
 - Phase 5 완료.
 
 ### Implementation Checklist
-- [ ] `src/client/lib/shuffle.ts`: Fisher-Yates 중복 없는 셔플 큐 및 재셔플 시 직전 마지막 항목 중복 방지 로직 구현.
-- [ ] `src/client/components/PhotoFrameMode.tsx`:
+- [x] `src/client/lib/shuffle.ts`: Fisher-Yates 중복 없는 셔플 큐 및 재셔플 시 직전 마지막 항목 중복 방지 로직 구현.
+- [x] `src/client/components/PhotoFrameMode.tsx`:
   - 현재 선택된 앨범/태그 필터로 `/api/images/ids` 1회 로드.
   - Fullscreen API 진입/종료 및 Wake Lock 요청/해제(미지원 환경 안전 무시).
   - 2-레이어(`layerA`/`layerB`) 더블 버퍼링 + `new Image()`/`decode()` 프리로드 완료 후 크로스페이드(`1200ms`) + 선택적 Ken Burns 미세 줌 애니메이션.
@@ -263,6 +263,16 @@ Refs: RQ-2, RQ-10, DC-8, DC-9, M-8
 
 ### Exit Criteria
 - 갤러리의 `액자 모드` 버튼으로 진입해 깜빡임 없는 크로스페이드 롤링, 순차/랜덤 전환, 주기 변경, 필터 범위 재생이 정상 동작한다.
+
+Files:
+- `docs/IMPLEMENT.md` (modified)
+- `src/client/__tests__/PhotoFrameMode.test.tsx` (added)
+- `src/client/__tests__/shuffle.test.ts` (added)
+- `src/client/api/admin.ts` (modified)
+- `src/client/components/GalleryView.tsx` (modified)
+- `src/client/components/PhotoFrameMode.tsx` (added)
+- `src/client/index.css` (modified)
+- `src/client/lib/shuffle.ts` (added)
 
 ---
 
@@ -316,10 +326,10 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
   - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 및 커밋·푸시 (`3c004c8`).
   - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 및 커밋·푸시 (`ba503d5`).
   - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 및 커밋·푸시 (`ae8cfa7`).
-  - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` 완료 (미커밋 상태).
-  - `Phase 5 — 프론트 갤러리: Virtual Scroll 구간 Fetch, 앨범/태그 필터 & 라이트박스` 완료 (미커밋 상태; 17파일 53건 테스트 통과).
+  - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` & `Phase 5 — 프론트 갤러리` 완료 및 커밋 (`47141ef`).
+  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 (미커밋 상태; 19파일 59건 테스트 통과).
 - **Next Step:**
-  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 구현 진행 (또는 Phase 4~5 중간 커밋).
+  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 진행.
 - **Blockers:**
   - 없음.
-- **Latest Commit SHA:** `ae8cfa7`
+- **Latest Commit SHA:** `47141ef`

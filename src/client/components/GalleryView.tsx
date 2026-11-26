@@ -7,6 +7,7 @@ import {
 } from '@/client/stores/galleryStore';
 import { FilterBar } from './FilterBar';
 import { LightboxModal } from './LightboxModal';
+import { PhotoFrameMode } from './PhotoFrameMode';
 import { VirtualGrid } from './VirtualGrid';
 
 export interface GalleryViewProps {
@@ -22,7 +23,7 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
   const store = initialProps.store ?? createGalleryStore();
 
   const lightboxIndex = state<number | null>(null, renew);
-  const frameModeNotice = state<boolean>(false, renew);
+  const frameModeOpen = state<boolean>(false, renew);
 
   const resetScrollTop = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
@@ -36,7 +37,7 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
 
   const applyFilter = (next: Partial<GalleryFilter>) => {
     lightboxIndex.value = null;
-    frameModeNotice.value = false;
+    frameModeOpen.value = false;
     resetScrollTop();
     void store.setFilter(next);
   };
@@ -58,7 +59,8 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
     if (latestProps.onEnterFrameMode) {
       latestProps.onEnterFrameMode(snap.filter);
     } else {
-      frameModeNotice.value = true;
+      lightboxIndex.value = null;
+      frameModeOpen.value = true;
     }
   };
 
@@ -83,6 +85,15 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
     const snap = store.getSnapshot();
     const hasFilter = snap.filter.albumId !== null || snap.filter.tag !== null;
     const openIndex = lightboxIndex.value;
+    const activeAlbumName =
+      snap.filter.albumId === '__unassigned__'
+        ? '미분류'
+        : (snap.albums.find((a) => a.id === snap.filter.albumId)?.name ?? null);
+    const frameFilterParts: string[] = [];
+    if (activeAlbumName) frameFilterParts.push(activeAlbumName);
+    if (snap.filter.tag) frameFilterParts.push(`#${snap.filter.tag}`);
+    const frameFilterLabel =
+      frameFilterParts.length > 0 ? frameFilterParts.join(' · ') : '전체 사진';
 
     return (
       <section data-testid="gallery-view" class="space-y-5">
@@ -100,25 +111,6 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
           onEnterFrameMode={handleEnterFrameMode}
           onGoAdmin={props.onGoAdmin}
         />
-
-        {frameModeNotice.value && (
-          <div
-            role="status"
-            data-testid="frame-mode-placeholder-notice"
-            class="flex items-center justify-between rounded-xl border border-sky-500/40 bg-sky-950/40 px-4 py-3 text-sm text-sky-200"
-          >
-            <span>전체화면 액자 롤링 모드는 Phase 6에서 연결됩니다.</span>
-            <button
-              type="button"
-              onClick={() => {
-                frameModeNotice.value = false;
-              }}
-              class="text-xs text-sky-300 underline hover:text-white"
-            >
-              닫기
-            </button>
-          </div>
-        )}
 
         {snap.error && (
           <div
@@ -216,6 +208,16 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
           }}
           onNavigate={handleNavigateLightbox}
         />
+
+        {frameModeOpen.value && (
+          <PhotoFrameMode
+            filter={snap.filter}
+            filterLabel={frameFilterLabel}
+            onClose={() => {
+              frameModeOpen.value = false;
+            }}
+          />
+        )}
       </section>
     );
   };
