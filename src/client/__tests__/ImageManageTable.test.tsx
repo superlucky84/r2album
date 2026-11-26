@@ -283,4 +283,32 @@ describe('ImageManageTable component', () => {
     );
     expect(onDataChanged).toHaveBeenCalledTimes(3);
   });
+
+  it('allows admin to change page size (40 -> 100 -> 500) and reloads from offset 0', async () => {
+    const requestedUrls: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      requestedUrls.push(url);
+      return new Response(
+        JSON.stringify({ total: SAMPLE_ITEMS.length, offset: 0, limit: 100, items: SAMPLE_ITEMS }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    render(<ImageManageTable albums={ALBUMS} tags={TAGS} />);
+    await flush();
+    expect(requestedUrls[0]).toContain('offset=0&limit=40');
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('manage-page-size'), { target: { value: '200' } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(requestedUrls[1]).toContain('offset=0&limit=200');
+
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('manage-page-size'), { target: { value: '500' } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(requestedUrls[2]).toContain('offset=0&limit=500');
+  });
 });

@@ -29,6 +29,18 @@ import {
 } from '../validation';
 import { buildMediaUrls, fetchTagsByImageIds } from './images';
 
+const D1_IN_CHUNK_SIZE = 50; // Safe margin under Cloudflare D1's 100 bound-parameter limit per query
+const D1_PAIR_INSERT_CHUNK_SIZE = 40; // 40 * 2 = 80 bound parameters per multi-row INSERT
+const R2_DELETE_CHUNK_SIZE = 500; // Well under Cloudflare R2's 1,000-key batch delete limit
+
+function chunkArray<T>(items: readonly T[], chunkSize: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += chunkSize) {
+    chunks.push(items.slice(i, i + chunkSize));
+  }
+  return chunks;
+}
+
 async function syncImageTags(db: D1Database, imageId: string, tags: string[]): Promise<void> {
   await db.prepare('DELETE FROM image_tags WHERE image_id = ?').bind(imageId).run();
 
@@ -433,30 +445,39 @@ export function createAdminRoutes() {
     );
 
     const db = c.env.DB;
-    const placeholders = uniqueIds.map(() => '?').join(', ');
-    const { results } = await db
-      .prepare(`SELECT id, display_key, thumb_key FROM images WHERE id IN (${placeholders})`)
-      .bind(...uniqueIds)
-      .all<{ id: string; display_key: string; thumb_key: string }>();
+    const found: Array<{ id: string; display_key: string; thumb_key: string }> = [];
+    for (const idChunk of chunkArray(uniqueIds, D1_IN_CHUNK_SIZE)) {
+      const placeholders = idChunk.map(() => '?').join(', ');
+      const { results } = await db
+        .prepare(`SELECT id, display_key, thumb_key FROM images WHERE id IN (${placeholders})`)
+        .bind(...idChunk)
+        .all<{ id: string; display_key: string; thumb_key: string }>();
+      if (results) {
+        found.push(...results);
+      }
+    }
 
-    const found = results ?? [];
     if (found.length === 0) {
       return c.json({ ok: true, deletedIds: [] });
     }
 
     const foundIds = found.map((r) => r.id);
-    const foundPlaceholders = foundIds.map(() => '?').join(', ');
-    await db
-      .prepare(`DELETE FROM image_tags WHERE image_id IN (${foundPlaceholders})`)
-      .bind(...foundIds)
-      .run();
-    await db
-      .prepare(`DELETE FROM images WHERE id IN (${foundPlaceholders})`)
-      .bind(...foundIds)
-      .run();
+    for (const idChunk of chunkArray(foundIds, D1_IN_CHUNK_SIZE)) {
+      const foundPlaceholders = idChunk.map(() => '?').join(', ');
+      await db
+        .prepare(`DELETE FROM image_tags WHERE image_id IN (${foundPlaceholders})`)
+        .bind(...idChunk)
+        .run();
+      await db
+        .prepare(`DELETE FROM images WHERE id IN (${foundPlaceholders})`)
+        .bind(...idChunk)
+        .run();
+    }
 
     const r2Keys = found.flatMap((r) => [r.display_key, r.thumb_key]);
-    await c.env.MEDIA_BUCKET.delete(r2Keys);
+    for (const keyChunk of chunkArray(r2Keys, R2_DELETE_CHUNK_SIZE)) {
+      await c.env.MEDIA_BUCKET.delete(keyChunk);
+    }
 
     return c.json({ ok: true, deletedIds: foundIds });
   });
@@ -518,13 +539,18 @@ export function createAdminRoutes() {
       }
     }
 
-    const placeholders = uniqueIds.map(() => '?').join(', ');
-    const { results } = await db
-      .prepare(`SELECT id FROM images WHERE id IN (${placeholders})`)
-      .bind(...uniqueIds)
-      .all<{ id: string }>();
+    const foundIds: string[] = [];
+    for (const idChunk of chunkArray(uniqueIds, D1_IN_CHUNK_SIZE)) {
+      const placeholders = idChunk.map(() => '?').join(', ');
+      const { results } = await db
+        .prepare(`SELECT id FROM images WHERE id IN (${placeholders})`)
+        .bind(...idChunk)
+        .all<{ id: string }>();
+      if (results) {
+        for (const r of results) foundIds.push(r.id);
+      }
+    }
 
-    const foundIds = (results ?? []).map((r) => r.id);
     if (foundIds.length === 0) {
       return c.json({ ok: true, updatedIds: [], updatedCount: 0 });
     }
@@ -550,25 +576,29 @@ export function createAdminRoutes() {
       }
     }
 
-    const foundPlaceholders = foundIds.map(() => '?').join(', ');
-
     if (hasAlbumChange) {
-      await db
-        .prepare(`UPDATE images SET album_id = ? WHERE id IN (${foundPlaceholders})`)
-        .bind(nextAlbumId, ...foundIds)
-        .run();
+      for (const idChunk of chunkArray(foundIds, D1_IN_CHUNK_SIZE)) {
+        const foundPlaceholders = idChunk.map(() => '?').join(', ');
+        await db
+          .prepare(`UPDATE images SET album_id = ? WHERE id IN (${foundPlaceholders})`)
+          .bind(nextAlbumId, ...idChunk)
+          .run();
+      }
     }
 
     if (removeTags.length > 0) {
       const tagPlaceholders = removeTags.map(() => '?').join(', ');
-      await db
-        .prepare(
-          `DELETE FROM image_tags
-           WHERE image_id IN (${foundPlaceholders})
-             AND tag_id IN (SELECT id FROM tags WHERE name IN (${tagPlaceholders}))`
-        )
-        .bind(...foundIds, ...removeTags)
-        .run();
+      for (const idChunk of chunkArray(foundIds, D1_IN_CHUNK_SIZE)) {
+        const foundPlaceholders = idChunk.map(() => '?').join(', ');
+        await db
+          .prepare(
+            `DELETE FROM image_tags
+             WHERE image_id IN (${foundPlaceholders})
+               AND tag_id IN (SELECT id FROM tags WHERE name IN (${tagPlaceholders}))`
+          )
+          .bind(...idChunk, ...removeTags)
+          .run();
+      }
     }
 
     if (addTags.length > 0) {
@@ -579,10 +609,15 @@ export function createAdminRoutes() {
           .bind(tagName)
           .first<{ id: number }>();
         if (tagRow) {
-          for (const imageId of foundIds) {
+          for (const idChunk of chunkArray(foundIds, D1_PAIR_INSERT_CHUNK_SIZE)) {
+            const valuesSql = idChunk.map(() => '(?, ?)').join(', ');
+            const binds: Array<string | number> = [];
+            for (const imageId of idChunk) {
+              binds.push(imageId, tagRow.id);
+            }
             await db
-              .prepare('INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES (?, ?)')
-              .bind(imageId, tagRow.id)
+              .prepare(`INSERT OR IGNORE INTO image_tags (image_id, tag_id) VALUES ${valuesSql}`)
+              .bind(...binds)
               .run();
           }
         }

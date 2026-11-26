@@ -210,7 +210,7 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 | `GET` | `/api/media/:variant/:id` | Private R2 이미지 스트리밍 (`variant`: `thumb` \| `display`) | `image/webp` + `Cache-Control: private, max-age=31536000, immutable` + `ETag` |
 
 > `ImageItem` 필드: `{ id, albumId, albumName, caption, tags: string[], takenAt, hasExifDate, uploadedAt, width, height, thumbUrl, displayUrl }`
-> `limit` 최대값은 서버에서 `100`으로 상한 제한(clamp)합니다.
+> `limit` 최대값은 서버에서 `500`으로 상한 제한(clamp)합니다(관리자 페이지당 `40/100/200/500`건 선택 지원, D1 `IN` 쿼리는 내부 50건 청크 분할).
 
 ### 5.2 관리자 API (`requireAdmin`)
 | Method | Endpoint | 설명 |
@@ -219,8 +219,8 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 | `POST` | `/api/admin/images` | 이미지 1건 업로드 (`multipart/form-data`: `display` WebP, `thumb` WebP, `metadata` JSON `{ originalFilename, takenAt, hasExifDate, width, height, albumId?, tags?, caption? }`) |
 | `PATCH` | `/api/admin/images/:id` | 캡션, 앨범, 태그 목록, `takenAt` 수정 |
 | `DELETE` | `/api/admin/images/:id` | 이미지 삭제 (R2 2개 객체 + D1 레코드 제거) |
-| `POST` | `/api/admin/images/bulk-delete` | 다중 선택 이미지 일괄 삭제 (`{ ids: string[] }`, 최대 50건/요청) |
-| `POST` | `/api/admin/images/bulk-update` | 다중 선택 이미지 일괄 앨범 이동 및 태그 추가/제거 (`{ ids: string[], albumId?: string \| null, addTags?: string[], removeTags?: string[] }`, 최대 50건/요청) |
+| `POST` | `/api/admin/images/bulk-delete` | 다중 선택 이미지 일괄 삭제 (`{ ids: string[] }`, 최대 500건/요청, D1 50건·R2 500키 청크 분할) |
+| `POST` | `/api/admin/images/bulk-update` | 다중 선택 이미지 일괄 앨범 이동 및 태그 추가/제거 (`{ ids: string[], albumId?: string \| null, addTags?: string[], removeTags?: string[] }`, 최대 500건/요청) |
 | `POST` / `PATCH` / `DELETE` | `/api/admin/albums` (`/:id`) | 앨범 생성, 이름/설명 수정, 삭제(소속 이미지는 `album_id = NULL` 유지) |
 | `GET` / `POST` / `PATCH` / `DELETE` | `/api/admin/users` (`/:email`) | 허용/대기 사용자 목록 조회(`pending` 우선 정렬 + `pendingCount`), 직접 사전 등록(`approved`), 승인/거절/역할 변경(`PATCH`: `status`, `role`, `note`), 제거 (`BOOTSTRAP_ADMIN_EMAIL`은 삭제·강등 불가) |
 

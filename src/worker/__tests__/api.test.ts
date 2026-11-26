@@ -446,4 +446,98 @@ describe('Phase 3 API: media streaming, images range/filter & admin CRUD', () =>
       ).status
     ).toBe(400);
   });
+
+  it('safely chunks D1 IN queries for >100 images across range fetch, bulk-update, and bulk-delete', async () => {
+    const app = createApp();
+    const { env, sqlite, r2Store } = createTestEnv();
+    const adminHeaders = await makeAuthHeader('owner@example.com', 'admin', 'Owner');
+    const jsonHeaders = { ...adminHeaders, 'Content-Type': 'application/json' };
+
+    const albumRes = await app.request(
+      '/api/admin/albums',
+      { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ name: 'Big Batch' }) },
+      env
+    );
+    const album = (await albumRes.json()) as AlbumSummary;
+
+    // Seed 120 images directly (> D1's 100-variable per-query limit)
+    const ids: string[] = [];
+    const insertImg = sqlite.prepare(
+      `INSERT INTO images (
+         id, album_id, caption, original_filename, taken_at, has_exif_date,
+         uploaded_at, uploaded_by, width, height,
+         display_key, thumb_key, display_bytes, thumb_bytes
+       ) VALUES (?, NULL, ?, 'p.jpg', ?, 1, ?, 'owner@example.com', 1000, 800, ?, ?, 100, 50)`
+    );
+    for (let i = 0; i < 120; i += 1) {
+      const id = `batch-img-${String(i).padStart(4, '0')}`;
+      ids.push(id);
+      insertImg.run(
+        id,
+        `Photo ${i}`,
+        1_700_000_000_000 + i,
+        1_700_000_000_000,
+        `display/${id}.webp`,
+        `thumb/${id}.webp`
+      );
+      r2Store.set(`display/${id}.webp`, {
+        bytes: new Uint8Array([1]),
+        contentType: 'image/webp',
+        etag: `d-${i}`,
+      });
+      r2Store.set(`thumb/${id}.webp`, {
+        bytes: new Uint8Array([1]),
+        contentType: 'image/webp',
+        etag: `t-${i}`,
+      });
+    }
+
+    // Bulk update all 120 images at once (album move + add 2 tags)
+    const bulkUp = await app.request(
+      '/api/admin/images/bulk-update',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ ids, albumId: album.id, addTags: ['trip', '2026'] }),
+      },
+      env
+    );
+    expect(bulkUp.status).toBe(200);
+    expect(await bulkUp.json()).toMatchObject({ ok: true, updatedCount: 120 });
+
+    // Fetch all 120 in one page (limit=200) -> verifies chunked fetchTagsByImageIds
+    const listRes = await app.request(
+      '/api/images?offset=0&limit=200',
+      { headers: adminHeaders },
+      env
+    );
+    expect(listRes.status).toBe(200);
+    const list = (await listRes.json()) as ImagesRangeResponse;
+    expect(list.total).toBe(120);
+    expect(list.items).toHaveLength(120);
+    expect(list.items[0].albumId).toBe(album.id);
+    expect(list.items[0].tags).toEqual(['2026', 'trip']);
+    expect(list.items[119].tags).toEqual(['2026', 'trip']);
+
+    // Bulk remove tag across all 120 images
+    const bulkRem = await app.request(
+      '/api/admin/images/bulk-update',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ ids, removeTags: ['trip'] }),
+      },
+      env
+    );
+    expect(bulkRem.status).toBe(200);
+
+    // Bulk delete all 120 images at once -> cleans both D1 and all 240 R2 keys
+    const bulkDel = await app.request(
+      '/api/admin/images/bulk-delete',
+      { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ ids }) },
+      env
+    );
+    expect(bulkDel.status).toBe(200);
+    expect(r2Store.size).toBe(0);
+  });
 });

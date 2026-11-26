@@ -1,6 +1,11 @@
 import { mount, mountCallback } from 'lithent';
 import { state } from 'lithent/helper';
-import { BULK_DELETE_MAX, CAPTION_MAX_LENGTH, CHUNK_SIZE } from '@/shared/constants';
+import {
+  ADMIN_PAGE_SIZE_OPTIONS,
+  BULK_DELETE_MAX,
+  CAPTION_MAX_LENGTH,
+  CHUNK_SIZE,
+} from '@/shared/constants';
 import type { AlbumSummary, ImageItem, TagSummary } from '@/shared/types';
 import {
   bulkDeleteAdminImages,
@@ -46,6 +51,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
   const items = state<ImageItem[]>([], renew);
   const total = state<number>(0, renew);
   const offset = state<number>(0, renew);
+  const pageSize = state<number>(CHUNK_SIZE, renew);
   const filterAlbumId = state<string>('', renew);
   const filterTag = state<string>('', renew);
   const searchQuery = state<string>('', renew);
@@ -63,7 +69,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
   const deleteModal = state<DeleteModalState | null>(null, renew);
   const deleting = state<boolean>(false, renew);
 
-  const loadImages = async (nextOffset = offset.value) => {
+  const loadImages = async (nextOffset = offset.value, nextLimit = pageSize.value) => {
     const seq = ++requestSeq;
     loading.value = true;
     errorMessage.value = null;
@@ -71,7 +77,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     try {
       const res = await fetchImages({
         offset: nextOffset,
-        limit: CHUNK_SIZE,
+        limit: nextLimit,
         albumId: filterAlbumId.value || undefined,
         tag: filterTag.value || undefined,
       });
@@ -102,7 +108,15 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     filterTag.value = nextTag;
     selectedIds.value = [];
     editDraft.value = null;
-    void loadImages(0);
+    void loadImages(0, pageSize.value);
+  };
+
+  const handlePageSizeChange = (nextSize: number) => {
+    if (!Number.isFinite(nextSize) || nextSize <= 0 || nextSize === pageSize.value) return;
+    pageSize.value = nextSize;
+    selectedIds.value = [];
+    editDraft.value = null;
+    void loadImages(0, nextSize);
   };
 
   const toggleSelect = (id: string) => {
@@ -267,7 +281,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
 
       const nextOffset =
         items.value.length <= target.ids.length && offset.value > 0
-          ? Math.max(0, offset.value - CHUNK_SIZE)
+          ? Math.max(0, offset.value - pageSize.value)
           : offset.value;
       await loadImages(nextOffset);
       latestProps.onDataChanged?.();
@@ -300,7 +314,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     const allChecked =
       visibleItems.length > 0 && visibleItems.every((i) => selectedIds.value.includes(i.id));
     const hasPrev = offset.value > 0;
-    const hasNext = offset.value + CHUNK_SIZE < total.value;
+    const hasNext = offset.value + pageSize.value < total.value;
 
     const selectedSet = new Set(selectedIds.value);
     const selectedTagSet = new Set<string>();
@@ -367,6 +381,22 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
           </div>
 
           <div class="flex items-center gap-2">
+            <select
+              aria-label="페이지당 표시 개수"
+              data-testid="manage-page-size"
+              value={String(pageSize.value)}
+              disabled={loading.value}
+              onChange={(e: Event) =>
+                handlePageSizeChange(Number((e.target as HTMLSelectElement).value))
+              }
+              class="rounded-xl border border-neutral-700 bg-neutral-950 px-2.5 py-2 text-xs text-white focus:border-neutral-500 focus:outline-none disabled:opacity-50"
+            >
+              {ADMIN_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={String(size)}>
+                  {size}장씩 보기
+                </option>
+              ))}
+            </select>
             {selectedIds.value.length > 0 && (
               <button
                 type="button"
@@ -749,7 +779,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
             <button
               type="button"
               disabled={!hasPrev || loading.value}
-              onClick={() => void loadImages(Math.max(0, offset.value - CHUNK_SIZE))}
+              onClick={() => void loadImages(Math.max(0, offset.value - pageSize.value))}
               class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
             >
               이전
@@ -757,7 +787,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
             <button
               type="button"
               disabled={!hasNext || loading.value}
-              onClick={() => void loadImages(offset.value + CHUNK_SIZE)}
+              onClick={() => void loadImages(offset.value + pageSize.value)}
               class="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
             >
               다음

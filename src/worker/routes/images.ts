@@ -39,6 +39,8 @@ export function buildMediaUrls(id: string) {
   };
 }
 
+const D1_IN_CHUNK_SIZE = 50;
+
 export async function fetchTagsByImageIds(
   db: D1Database,
   imageIds: string[]
@@ -46,24 +48,27 @@ export async function fetchTagsByImageIds(
   const map = new Map<string, string[]>();
   if (imageIds.length === 0) return map;
 
-  const placeholders = imageIds.map(() => '?').join(', ');
-  const { results } = await db
-    .prepare(
-      `SELECT it.image_id, t.name
-       FROM image_tags it
-       INNER JOIN tags t ON t.id = it.tag_id
-       WHERE it.image_id IN (${placeholders})
-       ORDER BY t.name ASC`
-    )
-    .bind(...imageIds)
-    .all<{ image_id: string; name: string }>();
+  for (let start = 0; start < imageIds.length; start += D1_IN_CHUNK_SIZE) {
+    const chunk = imageIds.slice(start, start + D1_IN_CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const { results } = await db
+      .prepare(
+        `SELECT it.image_id, t.name
+         FROM image_tags it
+         INNER JOIN tags t ON t.id = it.tag_id
+         WHERE it.image_id IN (${placeholders})
+         ORDER BY t.name ASC`
+      )
+      .bind(...chunk)
+      .all<{ image_id: string; name: string }>();
 
-  for (const row of results ?? []) {
-    const existing = map.get(row.image_id);
-    if (existing) {
-      existing.push(row.name);
-    } else {
-      map.set(row.image_id, [row.name]);
+    for (const row of results ?? []) {
+      const existing = map.get(row.image_id);
+      if (existing) {
+        existing.push(row.name);
+      } else {
+        map.set(row.image_id, [row.name]);
+      }
     }
   }
   return map;
