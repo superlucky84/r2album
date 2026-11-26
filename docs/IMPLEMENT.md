@@ -153,7 +153,7 @@ Files:
 
 ---
 
-## Phase 4 — 관리자 페이지 (`/admin`): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI: pending
+## Phase 4 — 관리자 페이지 (`/admin`): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI: done
 
 Refs: RQ-2, RQ-5, RQ-6, RQ-7, RQ-11, DC-2, DC-3, DC-5, DC-9, M-4, M-5, M-9
 
@@ -161,23 +161,45 @@ Refs: RQ-2, RQ-5, RQ-6, RQ-7, RQ-11, DC-2, DC-3, DC-5, DC-9, M-4, M-5, M-9
 - Phase 3 완료.
 
 ### Implementation Checklist
-- [ ] `src/client/lib/exif.ts`: JPEG EXIF `DateTimeOriginal`/`CreateDate` 및 `Orientation` 추출, EXIF 없는 파일 fallback 처리.
-- [ ] `src/client/lib/imageResize.ts`: 브라우저 Canvas 기반 표시용 WebP(최대 2048px, `q=0.82`) + 썸네일 WebP(최대 480px, `q=0.75`) 변환 및 크기/해상도 반환.
-- [ ] `src/client/components/admin/UploadDropzone.tsx`: 드래그 앤 드롭 다중 선택, 기본 앨범/태그 지정, 동시성 3 업로드 큐, 파일별 상태·진행률·원본 대비 용량 절감률 표시, 실패 항목 재시도.
-- [ ] `src/client/components/admin/ImageManageTable.tsx`: 업로드된 이미지 검색/목록, 인라인 캡션·앨범·태그·촬영일 수정, 단건/다중 선택 삭제(명시적 확인 모달 포함).
-- [ ] `src/client/components/admin/AlbumManager.tsx` & `UserAllowlistManager.tsx`: 앨범 CRUD, 허용 사용자(`admin`/`viewer`) 관리, 저장 용량 현황(`사용 GB / 10 GB` 게이지) 표시.
+- [x] `src/client/lib/exif.ts`: JPEG EXIF `DateTimeOriginal`/`CreateDate` 및 `Orientation` 추출, EXIF 없는 파일 fallback 처리.
+- [x] `src/client/lib/imageResize.ts`: 브라우저 Canvas 기반 표시용 WebP(최대 2048px, `q=0.82`) + 썸네일 WebP(최대 480px, `q=0.75`) 변환 및 크기/해상도 반환.
+- [x] `src/client/components/admin/UploadDropzone.tsx`: 드래그 앤 드롭 다중 선택, 기본 앨범/태그 지정, 동시성 3 업로드 큐, 파일별 상태·진행률·원본 대비 용량 절감률 표시, 실패 항목 재시도.
+- [x] `src/client/components/admin/ImageManageTable.tsx`: 업로드된 이미지 검색/목록, 인라인 캡션·앨범·태그·촬영일 수정, 단건/다중 선택 삭제(명시적 확인 모달 포함).
+- [x] `src/client/components/admin/AlbumManager.tsx` & `UserAllowlistManager.tsx`: 앨범 CRUD, 허용 사용자(`admin`/`viewer`) 및 가입 승인 대기열 관리, 저장 용량 현황(`사용 GB / 10 GB` 게이지) 표시.
 
 ### Baseline Tests
 - `exif.ts`: EXIF 포함 JPEG 샘플(촬영일·회전값), EXIF 없는 PNG/WebP, 손상 헤더 fallback 단위 테스트.
 - `imageResize.ts`: 가로/세로 긴 이미지 리사이징 비율 유지, 작은 이미지 미확대 검증 단위 테스트.
-- `UploadDropzone`, `ImageManageTable`, `UserAllowlistManager` 컴포넌트 테스트 (`lithent/test` + `await act(...)`).
+- `UploadDropzone`, `ImageManageTable`, `UserAllowlistManager`, `AlbumManager`/`AdminView` 컴포넌트 테스트 (`lithent/test` + `await act(...)`).
 
 ### Exit Criteria
 - 관리자 페이지에서 여러 장을 드래그 앤 드롭하면 브라우저에서 WebP 2종으로 변환되어 업로드되고, 저장 용량 통계 및 이미지/앨범/태그/사용자 관리가 정상 동작한다.
 
+Files:
+- `docs/IMPLEMENT.md` (modified)
+- `src/client/App.tsx` (modified)
+- `src/client/__tests__/AlbumManager.test.tsx` (added)
+- `src/client/__tests__/App.test.tsx` (modified)
+- `src/client/__tests__/ImageManageTable.test.tsx` (added)
+- `src/client/__tests__/UploadDropzone.test.tsx` (added)
+- `src/client/__tests__/UserAllowlistManager.test.tsx` (added)
+- `src/client/__tests__/exif.test.ts` (added)
+- `src/client/__tests__/imageResize.test.ts` (added)
+- `src/client/api/admin.ts` (added)
+- `src/client/components/admin/AdminView.tsx` (added)
+- `src/client/components/admin/AlbumManager.tsx` (added)
+- `src/client/components/admin/ConfirmModal.tsx` (added)
+- `src/client/components/admin/ImageManageTable.tsx` (added)
+- `src/client/components/admin/StorageGauge.tsx` (added)
+- `src/client/components/admin/UploadDropzone.tsx` (added)
+- `src/client/components/admin/UserAllowlistManager.tsx` (added)
+- `src/client/lib/exif.ts` (added)
+- `src/client/lib/format.ts` (added)
+- `src/client/lib/imageResize.ts` (added)
+
 ---
 
-## Phase 5 — 프론트 갤러리: Virtual Scroll 구간 Fetch, 앨범/태그 필터 & 라이트박스: pending
+## Phase 5 — 프론트 갤러리: Virtual Scroll 구간 Fetch, 앨범/태그 필터 & 라이트박스: done
 
 Refs: RQ-2, RQ-6, RQ-7, RQ-8, RQ-9, DC-6, DC-7, DC-9, M-5, M-6, M-7
 
@@ -185,11 +207,11 @@ Refs: RQ-2, RQ-6, RQ-7, RQ-8, RQ-9, DC-6, DC-7, DC-9, M-5, M-6, M-7
 - Phase 3 완료 (Phase 4와 병렬 가능하나 실데이터 확인을 위해 Phase 4 이후 권장).
 
 ### Implementation Checklist
-- [ ] `src/client/lib/virtualGrid.ts`: 반응형 컬럼 수, 전체 가상 높이, 뷰포트 `[startRow..endRow]` 및 요청 청크(`CHUNK_SIZE = 40`, overscan ±1) 순수 계산 모듈 구현.
-- [ ] `src/client/stores/galleryStore.ts`: 청크 캐시(`Map<number, ImageItem[]>`), in-flight 중복 요청 방지, 필터 변경 시 generation 토큰 증가 및 캐시 무효화 구현.
-- [ ] `src/client/components/FilterBar.tsx`: 앨범 드롭다운/칩, 태그 필터, 총 사진 수 표시, `액자 모드` 진입 버튼, (`admin` 전용) `관리자` 링크.
-- [ ] `src/client/components/VirtualGrid.tsx`: 스크롤 `rAF` 스로틀링, 로딩 중 스켈레톤 슬롯, EXIF 촬영일 배지/반응형 썸네일 카드 렌더링.
-- [ ] `src/client/components/LightboxModal.tsx`: 고화질 표시용 WebP 뷰어, 촬영일/앨범/태그/캡션 표시, 좌우 키보드(`ArrowLeft`/`ArrowRight`/`Escape`) 및 스와이프 이동, 인접 이미지 1장 프리로드.
+- [x] `src/client/lib/virtualGrid.ts`: 반응형 컬럼 수, 전체 가상 높이, 뷰포트 `[startRow..endRow]` 및 요청 청크(`CHUNK_SIZE = 40`, overscan ±1) 순수 계산 모듈 구현.
+- [x] `src/client/stores/galleryStore.ts`: 청크 캐시(`Map<number, ImageItem[]>`), in-flight 중복 요청 방지, 필터 변경 시 generation 토큰 증가 및 캐시 무효화 구현.
+- [x] `src/client/components/FilterBar.tsx`: 앨범 드롭다운/칩, 태그 필터, 총 사진 수 표시, `액자 모드` 진입 버튼, (`admin` 전용) `관리자` 링크.
+- [x] `src/client/components/VirtualGrid.tsx`: 스크롤 `rAF` 스로틀링, 로딩 중 스켈레톤 슬롯, EXIF 촬영일 배지/반응형 썸네일 카드 렌더링.
+- [x] `src/client/components/LightboxModal.tsx`: 고화질 표시용 WebP 뷰어, 촬영일/앨범/태그/캡션 표시, 좌우 키보드(`ArrowLeft`/`ArrowRight`/`Escape`) 및 스와이프 이동, 인접 이미지 1장 프리로드.
 
 ### Baseline Tests
 - `virtualGrid.ts`: 0건, 1건, 50건, 30,000건 기준 가상 높이·행 범위·청크 인덱스 계산 경계 테스트.
@@ -199,6 +221,23 @@ Refs: RQ-2, RQ-6, RQ-7, RQ-8, RQ-9, DC-6, DC-7, DC-9, M-5, M-6, M-7
 ### Exit Criteria
 - 수천~수만 건 가상 데이터에서도 DOM 노드 수가 뷰포트 근방으로 일정하게 유지되고, 스크롤 구간에 해당하는 청크만 중복 없이 fetch된다.
 - 필터 전환 및 라이트박스 상세 탐색이 부드럽게 동작한다.
+
+Files:
+- `docs/IMPLEMENT.md` (modified)
+- `src/client/App.tsx` (modified)
+- `src/client/__tests__/App.test.tsx` (modified)
+- `src/client/__tests__/FilterBar.test.tsx` (added)
+- `src/client/__tests__/LightboxModal.test.tsx` (added)
+- `src/client/__tests__/VirtualGrid.test.tsx` (added)
+- `src/client/__tests__/galleryStore.test.ts` (added)
+- `src/client/__tests__/virtualGrid.test.ts` (added)
+- `src/client/components/FilterBar.tsx` (added)
+- `src/client/components/GalleryView.tsx` (added)
+- `src/client/components/LightboxModal.tsx` (added)
+- `src/client/components/VirtualGrid.tsx` (added)
+- `src/client/lib/format.ts` (modified)
+- `src/client/lib/virtualGrid.ts` (added)
+- `src/client/stores/galleryStore.ts` (added)
 
 ---
 
@@ -276,9 +315,11 @@ Refs: RQ-1, RQ-3, RQ-4, RQ-5, RQ-8, RQ-10, RQ-11, DC-1, DC-10, M-1, M-2, M-3, M-
   - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-11`) 전원 확정 완료 (`86172d4`).
   - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 및 커밋·푸시 (`3c004c8`).
   - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 및 커밋·푸시 (`ba503d5`).
-  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 (미커밋 상태; 실제 SQLite 마이그레이션 기반 테스트 포함 6파일 26건 통과).
+  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 및 커밋·푸시 (`ae8cfa7`).
+  - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` 완료 (미커밋 상태).
+  - `Phase 5 — 프론트 갤러리: Virtual Scroll 구간 Fetch, 앨범/태그 필터 & 라이트박스` 완료 (미커밋 상태; 17파일 53건 테스트 통과).
 - **Next Step:**
-  - `Phase 3` 코드 리뷰 여부 결정(또는 커밋) 후 `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` 시작.
+  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 구현 진행 (또는 Phase 4~5 중간 커밋).
 - **Blockers:**
   - 없음.
-- **Latest Commit SHA:** `ba503d5`
+- **Latest Commit SHA:** `ae8cfa7`

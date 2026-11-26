@@ -10,6 +10,8 @@ import {
   normalizeRoute,
 } from '@/client/lib/router';
 import { LoginView } from '@/client/components/LoginView';
+import { GalleryView } from '@/client/components/GalleryView';
+import { AdminView } from '@/client/components/admin/AdminView';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -192,25 +194,12 @@ export const App = mount((renew) => {
 
         <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
           {activeRoute === '/admin' ? (
-            <section
-              data-testid="admin-view"
-              class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-8"
-            >
-              <h2 class="text-xl font-semibold text-white">관리자 페이지</h2>
-              <p class="mt-2 text-sm text-neutral-400">
-                이미지 업로드, 메타데이터 편집 및 허용 사용자 관리 기능이 Phase 4에서 연결됩니다.
-              </p>
-            </section>
+            <AdminView />
           ) : (
-            <section
-              data-testid="gallery-view"
-              class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-8"
-            >
-              <h2 class="text-xl font-semibold text-white">갤러리</h2>
-              <p class="mt-2 text-sm text-neutral-400">
-                가상 스크롤 썸네일 그리드 및 전체화면 액자 롤링 모드가 Phase 5~6에서 연결됩니다.
-              </p>
-            </section>
+            <GalleryView
+              isAdmin={isAdmin}
+              onGoAdmin={isAdmin ? () => navigateTo('/admin') : undefined}
+            />
           )}
         </main>
       </div>

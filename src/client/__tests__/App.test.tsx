@@ -36,15 +36,31 @@ describe('App auth guard & RBAC routing', () => {
 
   it('redirects viewer away from /admin and hides admin nav link', async () => {
     window.history.replaceState(null, '', '/admin');
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          authenticated: true,
-          user: { email: 'family@example.com', name: 'Family', role: 'viewer' },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )
-    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/me') {
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            user: { email: 'family@example.com', name: 'Family', role: 'viewer' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url === '/api/filters') {
+        return new Response(JSON.stringify({ albums: [], tags: [], totalImages: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/images')) {
+        return new Response(JSON.stringify({ total: 0, offset: 0, limit: 40, items: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
 
     render(<App />);
     await flushPromises();
@@ -68,6 +84,32 @@ describe('App auth guard & RBAC routing', () => {
       }
       if (url === '/auth/logout') {
         return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === '/api/admin/stats') {
+        return new Response(
+          JSON.stringify({
+            totalImages: 0,
+            totalDisplayBytes: 0,
+            totalThumbBytes: 0,
+            totalBytes: 0,
+            freeTierBytes: 10 * 1024 * 1024 * 1024,
+            usageRatio: 0,
+            pendingUsers: 0,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url === '/api/filters') {
+        return new Response(JSON.stringify({ albums: [], tags: [], totalImages: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.startsWith('/api/images')) {
+        return new Response(JSON.stringify({ total: 0, offset: 0, limit: 40, items: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
