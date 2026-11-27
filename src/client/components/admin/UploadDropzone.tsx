@@ -1,43 +1,24 @@
-import { mount } from 'lithent';
+import { mount, mountCallback } from 'lithent';
 import { state } from 'lithent/helper';
 import { UPLOAD_CONCURRENCY } from '@/shared/constants';
 import type { AlbumSummary, ImageItem } from '@/shared/types';
-import { type UploadImagePayload, uploadAdminImage } from '@/client/api/admin';
-import { type ExifResult, extractExifFromFile } from '@/client/lib/exif';
+import type { UploadImagePayload } from '@/client/api/admin';
+import type { ExifResult } from '@/client/lib/exif';
+import { computeSavingsPercent, formatBytes, formatDateTime } from '@/client/lib/format';
+import type { ResizeOptions, ResizedImageVariants } from '@/client/lib/imageResize';
 import {
-  computeSavingsPercent,
-  formatBytes,
-  formatDateTime,
-  parseTagsInput,
-} from '@/client/lib/format';
-import {
-  type ResizeOptions,
-  type ResizedImageVariants,
-  resizeImageToWebpVariants,
-} from '@/client/lib/imageResize';
+  type UploadStore,
+  type UploadTaskItem,
+  type UploadTaskStatus,
+  createUploadStore,
+  globalUploadStore,
+} from '@/client/stores/uploadStore';
 
-export type UploadTaskStatus = 'queued' | 'processing' | 'uploading' | 'done' | 'error';
-
-export interface UploadTaskItem {
-  id: string;
-  file: File;
-  filename: string;
-  originalBytes: number;
-  albumId: string | null;
-  tags: string[];
-  status: UploadTaskStatus;
-  convertedBytes: number | null;
-  displayBytes: number | null;
-  thumbBytes: number | null;
-  width: number | null;
-  height: number | null;
-  takenAt: number | null;
-  hasExifDate: boolean;
-  errorMessage: string | null;
-}
+export type { UploadTaskItem, UploadTaskStatus };
 
 export interface UploadDropzoneProps {
   albums: AlbumSummary[];
+  store?: UploadStore;
   onUploadComplete?: (item: ImageItem) => void;
   onBatchFinished?: () => void;
   extractExif?: (file: Blob) => Promise<ExifResult>;
@@ -63,142 +44,43 @@ const STATUS_BADGE_CLASSES: Record<UploadTaskStatus, string> = {
 
 export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) => {
   let latestProps = initialProps;
-  let nextTaskSeq = 1;
-  let activeCount = 0;
-  let batchHadUploads = false;
+  const hasCustomDeps = Boolean(
+    initialProps.extractExif || initialProps.resizeImage || initialProps.uploadImage
+  );
+  const store: UploadStore =
+    initialProps.store ??
+    (hasCustomDeps
+      ? createUploadStore({
+          extractExif: initialProps.extractExif,
+          resizeImage: initialProps.resizeImage,
+          uploadImage: initialProps.uploadImage,
+        })
+      : globalUploadStore);
 
-  const tasks = state<UploadTaskItem[]>([], renew);
-  const selectedAlbumId = state<string>('', renew);
-  const defaultTagsInput = state<string>('', renew);
   const isDragOver = state<boolean>(false, renew);
 
-  const updateTask = (taskId: string, updater: (item: UploadTaskItem) => UploadTaskItem) => {
-    tasks.value = tasks.value.map((item) => (item.id === taskId ? updater(item) : item));
-  };
+  mountCallback(() => {
+    const unsubState = store.subscribe(() => {
+      renew();
+    });
+    const unsubComplete = store.onUploadComplete((item) => {
+      latestProps.onUploadComplete?.(item);
+    });
+    const unsubBatch = store.onBatchFinished(() => {
+      latestProps.onBatchFinished?.();
+    });
 
-  const runTask = async (taskId: string) => {
-    const task = tasks.value.find((item) => item.id === taskId);
-    if (!task) return;
-
-    const doExtractExif = latestProps.extractExif ?? extractExifFromFile;
-    const doResize = latestProps.resizeImage ?? resizeImageToWebpVariants;
-    const doUpload = latestProps.uploadImage ?? uploadAdminImage;
-
-    try {
-      updateTask(taskId, (item) => ({
-        ...item,
-        status: 'processing',
-        errorMessage: null,
-      }));
-
-      // 1. Extract EXIF before Canvas WebP encoding (Canvas strips EXIF)
-      const exif = await doExtractExif(task.file);
-      const resized = await doResize(task.file, { orientation: exif.orientation });
-
-      updateTask(taskId, (item) => ({
-        ...item,
-        status: 'uploading',
-        displayBytes: resized.displayBytes,
-        thumbBytes: resized.thumbBytes,
-        convertedBytes: resized.displayBytes + resized.thumbBytes,
-        width: resized.width,
-        height: resized.height,
-        takenAt: exif.takenAt,
-        hasExifDate: exif.hasExifDate,
-      }));
-
-      // 2. Upload display + thumb WebP + metadata via Worker R2 binding
-      const created = await doUpload({
-        displayBlob: resized.displayBlob,
-        thumbBlob: resized.thumbBlob,
-        metadata: {
-          originalFilename: task.filename,
-          takenAt: exif.takenAt,
-          hasExifDate: exif.hasExifDate,
-          width: resized.width,
-          height: resized.height,
-          albumId: task.albumId,
-          tags: task.tags,
-          caption: '',
-        },
-      });
-
-      batchHadUploads = true;
-      updateTask(taskId, (item) => ({
-        ...item,
-        status: 'done',
-        takenAt: created.takenAt,
-        hasExifDate: created.hasExifDate,
-      }));
-      latestProps.onUploadComplete?.(created);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : '이미지 변환 또는 업로드 중 오류가 발생했습니다.';
-      updateTask(taskId, (item) => ({
-        ...item,
-        status: 'error',
-        errorMessage: message,
-      }));
-    }
-  };
-
-  const pumpQueue = () => {
-    while (activeCount < UPLOAD_CONCURRENCY) {
-      const next = tasks.value.find((item) => item.status === 'queued');
-      if (!next) break;
-
-      activeCount += 1;
-      // Synchronously mark as processing before spawning next loop iteration so concurrency stays strictly bounded
-      updateTask(next.id, (item) => ({ ...item, status: 'processing', errorMessage: null }));
-
-      void runTask(next.id).finally(() => {
-        activeCount -= 1;
-        pumpQueue();
-        if (activeCount === 0 && !tasks.value.some((item) => item.status === 'queued')) {
-          if (batchHadUploads) {
-            batchHadUploads = false;
-            latestProps.onBatchFinished?.();
-          }
-        }
-      });
-    }
-  };
-
-  const enqueueFiles = (fileList: FileList | File[]) => {
-    const files = Array.from(fileList);
-    if (files.length === 0) return;
-
-    const albumId = selectedAlbumId.value || null;
-    const tags = parseTagsInput(defaultTagsInput.value);
-
-    const newTasks: UploadTaskItem[] = files.map((file) => ({
-      id: `upload-${nextTaskSeq++}`,
-      file,
-      filename: file.name || 'photo',
-      originalBytes: file.size,
-      albumId,
-      tags,
-      status: 'queued',
-      convertedBytes: null,
-      displayBytes: null,
-      thumbBytes: null,
-      width: null,
-      height: null,
-      takenAt: null,
-      hasExifDate: false,
-      errorMessage: null,
-    }));
-
-    tasks.value = [...newTasks, ...tasks.value];
-    pumpQueue();
-  };
+    return () => {
+      unsubState();
+      unsubComplete();
+      unsubBatch();
+    };
+  });
 
   const handleFileInputChange = (e: Event) => {
     const input = e.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
-      enqueueFiles(input.files);
+      store.enqueueFiles(input.files);
       input.value = '';
     }
   };
@@ -219,40 +101,23 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
     e.preventDefault();
     isDragOver.value = false;
     if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-      enqueueFiles(e.dataTransfer.files);
+      store.enqueueFiles(e.dataTransfer.files);
     }
-  };
-
-  const handleRetryTask = (taskId: string) => {
-    updateTask(taskId, (item) => ({
-      ...item,
-      status: 'queued',
-      errorMessage: null,
-    }));
-    pumpQueue();
-  };
-
-  const handleRetryAllFailed = () => {
-    tasks.value = tasks.value.map((item) =>
-      item.status === 'error' ? { ...item, status: 'queued', errorMessage: null } : item
-    );
-    pumpQueue();
-  };
-
-  const handleClearCompleted = () => {
-    tasks.value = tasks.value.filter((item) => item.status !== 'done');
   };
 
   return (props) => {
     latestProps = props;
-    const allTasks = tasks.value;
-    const doneCount = allTasks.filter((t) => t.status === 'done').length;
-    const errorCount = allTasks.filter((t) => t.status === 'error').length;
-    const inProgressCount = allTasks.filter(
-      (t) => t.status === 'queued' || t.status === 'processing' || t.status === 'uploading'
-    ).length;
-    const progressPercent =
-      allTasks.length > 0 ? Math.round(((doneCount + errorCount) / allTasks.length) * 100) : 0;
+    const snap = store.getSnapshot();
+    const {
+      tasks: allTasks,
+      selectedAlbumId,
+      defaultTagsInput,
+      doneCount,
+      errorCount,
+      inProgressCount,
+      progressPercent,
+      wakeLockActive,
+    } = snap;
 
     return (
       <section data-testid="upload-dropzone-section" class="space-y-5">
@@ -264,9 +129,9 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
             <select
               id="upload-default-album"
               data-testid="upload-album-select"
-              value={selectedAlbumId.value}
+              value={selectedAlbumId}
               onChange={(e: Event) => {
-                selectedAlbumId.value = (e.target as HTMLSelectElement).value;
+                store.setSelectedAlbumId((e.target as HTMLSelectElement).value);
               }}
               class="mt-1.5 w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-white focus:border-neutral-500 focus:outline-none"
             >
@@ -287,9 +152,9 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
               id="upload-default-tags"
               data-testid="upload-tags-input"
               type="text"
-              value={defaultTagsInput.value}
+              value={defaultTagsInput}
               onInput={(e: Event) => {
-                defaultTagsInput.value = (e.target as HTMLInputElement).value;
+                store.setDefaultTagsInput((e.target as HTMLInputElement).value);
               }}
               placeholder="예: 가족, 제주여행, 2026"
               class="mt-1.5 w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-white placeholder-neutral-500 focus:border-neutral-500 focus:outline-none"
@@ -330,6 +195,19 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
           </div>
         </div>
 
+        {inProgressCount > 0 && (
+          <div
+            data-testid="upload-background-notice"
+            class="flex flex-wrap items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-950/25 px-4 py-2.5 text-xs text-sky-200"
+          >
+            <span class="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+            <span>
+              다른 탭이나 갤러리로 이동해도 백그라운드에서 업로드가 계속됩니다. (새로고침·탭 닫기
+              주의{wakeLockActive ? ' · 화면 꺼짐 방지 켜짐' : ''})
+            </span>
+          </div>
+        )}
+
         {allTasks.length > 0 && (
           <div class="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -345,7 +223,7 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
                   <button
                     type="button"
                     data-testid="upload-retry-all"
-                    onClick={handleRetryAllFailed}
+                    onClick={() => store.retryAllFailed()}
                     class="rounded-lg border border-amber-500/40 bg-amber-950/50 px-3 py-1.5 text-xs font-medium text-amber-200 hover:bg-amber-900/60"
                   >
                     실패 항목 전체 재시도
@@ -355,7 +233,7 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
                   <button
                     type="button"
                     data-testid="upload-clear-done"
-                    onClick={handleClearCompleted}
+                    onClick={() => store.clearCompleted()}
                     class="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs text-neutral-300 hover:text-white"
                   >
                     완료 항목 지우기
@@ -429,7 +307,7 @@ export const UploadDropzone = mount<UploadDropzoneProps>((renew, initialProps) =
                       <button
                         type="button"
                         data-testid={`upload-retry-${task.id}`}
-                        onClick={() => handleRetryTask(task.id)}
+                        onClick={() => store.retryTask(task.id)}
                         class="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-neutral-700"
                       >
                         재시도

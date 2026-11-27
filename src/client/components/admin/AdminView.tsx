@@ -2,6 +2,7 @@ import { mount, mountCallback } from 'lithent';
 import { state } from 'lithent/helper';
 import type { AdminStatsResponse, AlbumSummary, TagSummary } from '@/shared/types';
 import { fetchAdminStats, fetchFilters } from '@/client/api/admin';
+import { globalUploadStore } from '@/client/stores/uploadStore';
 import { AlbumManager } from './AlbumManager';
 import { ImageManageTable } from './ImageManageTable';
 import { StorageGauge } from './StorageGauge';
@@ -42,7 +43,13 @@ export const AdminView = mount((renew) => {
   mountCallback(() => {
     const controller = new AbortController();
     void loadSummary(controller.signal);
-    return () => controller.abort();
+    const unsubUploadBatch = globalUploadStore.onBatchFinished(() => {
+      handleDataChanged();
+    });
+    return () => {
+      controller.abort();
+      unsubUploadBatch();
+    };
   });
 
   const handleDataChanged = () => {
@@ -155,9 +162,7 @@ export const AdminView = mount((renew) => {
         </div>
 
         <div>
-          {activeTab.value === 'upload' && (
-            <UploadDropzone albums={albums.value} onBatchFinished={handleDataChanged} />
-          )}
+          {activeTab.value === 'upload' && <UploadDropzone albums={albums.value} />}
           {activeTab.value === 'images' && (
             <ImageManageTable
               albums={albums.value}

@@ -12,6 +12,7 @@ import {
 import { LoginView } from '@/client/components/LoginView';
 import { GalleryView } from '@/client/components/GalleryView';
 import { AdminView } from '@/client/components/admin/AdminView';
+import { globalUploadStore } from '@/client/stores/uploadStore';
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -84,6 +85,9 @@ export const App = mount((renew) => {
   mountCallback(() => {
     const controller = new AbortController();
     window.addEventListener('popstate', syncLocation);
+    const unsubUpload = globalUploadStore.subscribe(() => {
+      renew();
+    });
 
     apiFetch<MeResponse>('/api/me', { signal: controller.signal })
       .then((res) => {
@@ -104,6 +108,7 @@ export const App = mount((renew) => {
 
     return () => {
       controller.abort();
+      unsubUpload();
       window.removeEventListener('popstate', syncLocation);
     };
   });
@@ -127,9 +132,17 @@ export const App = mount((renew) => {
     const user = currentUser.value;
     const isAdmin = user.role === 'admin';
     const activeRoute = route.value === '/admin' && isAdmin ? '/admin' : '/';
+    const uploadSnap = globalUploadStore.getSnapshot();
+    const isUploading = uploadSnap.inProgressCount > 0;
 
     return (
-      <div class="min-h-screen bg-neutral-950 text-neutral-100">
+      <div
+        class={
+          isUploading
+            ? 'min-h-screen overscroll-y-contain bg-neutral-950 text-neutral-100'
+            : 'min-h-screen bg-neutral-950 text-neutral-100'
+        }
+      >
         <header class="sticky top-0 z-20 border-b border-neutral-800/80 bg-neutral-950/90 backdrop-blur">
           <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
             <div class="flex items-center gap-6">
@@ -170,6 +183,19 @@ export const App = mount((renew) => {
             </div>
 
             <div class="flex items-center gap-3">
+              {isAdmin && isUploading && (
+                <a
+                  href="/admin"
+                  onClick={handleGoAdmin}
+                  data-testid="header-upload-badge"
+                  class="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-950/70 px-2.5 py-1 text-xs font-medium text-sky-200 transition hover:bg-sky-900/70"
+                >
+                  <span class="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+                  <span>
+                    업로드 {uploadSnap.doneCount}/{uploadSnap.totalCount}
+                  </span>
+                </a>
+              )}
               <span
                 data-testid="user-badge"
                 class="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-xs text-neutral-300"
