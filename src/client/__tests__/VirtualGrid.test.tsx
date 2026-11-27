@@ -97,23 +97,32 @@ describe('VirtualGrid component', () => {
       await Promise.resolve();
     });
 
+    expect(screen.getByTestId('sticky-year-bar')).toBeTruthy();
     expect(screen.getByTestId('year-jump-bar')).toBeTruthy();
     expect(screen.getByTestId('year-jump-2026').textContent).toContain('2026년');
     expect(screen.getByTestId('year-jump-2025').textContent).toContain('2025년');
     expect(screen.getByTestId('year-header-2026').textContent).toContain('2026년');
     expect(screen.getByTestId('year-header-2025').textContent).toContain('2025년');
+    expect(screen.getByTestId('sticky-year-frame-button').textContent).toContain('2026년 액자');
 
-    // Clicking year header's frame button triggers onStartYearFrame(year)
+    // Selecting 2025 in sticky year select scrolls and updates sticky frame button to 2025
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     await act(() => {
-      fireEvent.click(screen.getByTestId('year-frame-2025'));
+      fireEvent.change(screen.getByTestId('sticky-year-select'), { target: { value: '2025' } });
+    });
+    expect(scrollToSpy).toHaveBeenCalled();
+    expect(screen.getByTestId('sticky-year-frame-button').textContent).toContain('2025년 액자');
+
+    // Clicking sticky year frame button launches Photo Frame for active year (2025)
+    await act(() => {
+      fireEvent.click(screen.getByTestId('sticky-year-frame-button'));
     });
     expect(onStartYearFrame).toHaveBeenCalledWith(2025);
 
-    // Clicking year jump pill smoothly scrolls without errors
-    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    // Clicking in-grid section header's frame button also still triggers onStartYearFrame(year)
     await act(() => {
-      fireEvent.click(screen.getByTestId('year-jump-2025'));
+      fireEvent.click(screen.getByTestId('year-frame-2025'));
     });
-    expect(scrollToSpy).toHaveBeenCalled();
+    expect(onStartYearFrame).toHaveBeenCalledTimes(2);
   });
 });

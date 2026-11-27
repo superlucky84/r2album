@@ -14,6 +14,8 @@ export interface VirtualGridProps {
   onStartYearFrame?: (year: number) => void;
 }
 
+const STICKY_TOP_OFFSET = 124; // App header (~57px) + sticky year bar (~56px) + breathing gap
+
 export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
   let latestProps = initialProps;
   let lastResetKey = initialProps.resetKey;
@@ -41,7 +43,7 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
       if (rect.width > 0 && Math.round(rect.width) !== containerWidth.value) {
         containerWidth.value = Math.round(rect.width);
       }
-      const relativeScroll = Math.max(0, Math.round(-rect.top));
+      const relativeScroll = Math.max(0, Math.round(STICKY_TOP_OFFSET - rect.top));
       if (relativeScroll !== scrollTop.value) {
         scrollTop.value = relativeScroll;
       }
@@ -71,9 +73,8 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
   const scrollToYearOffset = (headerTop: number) => {
     if (typeof window === 'undefined') return;
     const el = containerRef.value;
-    const stickyHeaderOffset = 72;
     const gridPageTop = el ? window.scrollY + el.getBoundingClientRect().top : 0;
-    const targetY = Math.max(0, Math.round(gridPageTop + headerTop - stickyHeaderOffset));
+    const targetY = Math.max(0, Math.round(gridPageTop + headerTop - STICKY_TOP_OFFSET));
 
     if (typeof window.scrollTo === 'function') {
       try {
@@ -137,47 +138,104 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
       });
     }
 
-    // Highlight the year currently intersecting the top of the viewport
-    let activeYear: number | null = null;
+    // Track the year section currently at the top of the viewport under the sticky bar
+    let activeSection = layout.yearSections.length > 0 ? layout.yearSections[0] : null;
     if (layout.yearSections.length > 0) {
-      activeYear = layout.yearSections[0].year;
       for (const sec of layout.yearSections) {
-        if (sec.headerTop <= scrollTop.value + 40) {
-          activeYear = sec.year;
+        if (sec.headerTop <= scrollTop.value + 16) {
+          activeSection = sec;
         } else {
           break;
         }
       }
     }
 
+    const handleStickyYearSelect = (year: number) => {
+      const target = layout.yearSections.find((sec) => sec.year === year);
+      if (target) {
+        scrollToYearOffset(target.headerTop);
+      }
+    };
+
     return (
       <div class="space-y-3">
-        {layout.yearSections.length > 1 && (
-          <nav
-            aria-label="연도 바로가기"
-            data-testid="year-jump-bar"
-            class="flex flex-wrap items-center gap-1.5"
+        {activeSection && (
+          <div
+            data-testid="sticky-year-bar"
+            class="sticky top-[57px] z-10 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-neutral-800/90 bg-neutral-950/90 px-3.5 py-2.5 shadow-lg shadow-black/40 backdrop-blur-md"
           >
-            <span class="mr-1 text-xs font-medium text-neutral-400">연도 바로가기</span>
-            {layout.yearSections.map((sec) => {
-              const isActive = activeYear === sec.year;
-              return (
-                <button
-                  key={`jump-${sec.year}`}
-                  type="button"
-                  data-testid={`year-jump-${sec.year}`}
-                  onClick={() => scrollToYearOffset(sec.headerTop)}
-                  class={
-                    isActive
-                      ? 'rounded-full border border-white/40 bg-white px-3 py-1 text-xs font-semibold text-neutral-950 transition'
-                      : 'rounded-full border border-neutral-800 bg-neutral-900/80 px-3 py-1 text-xs text-neutral-300 transition hover:border-neutral-600 hover:text-white'
+            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+              {layout.yearSections.length > 1 ? (
+                <select
+                  aria-label="보고 있는 연도 변경"
+                  data-testid="sticky-year-select"
+                  value={String(activeSection.year)}
+                  onChange={(e: Event) =>
+                    handleStickyYearSelect(
+                      Number.parseInt((e.target as HTMLSelectElement).value, 10)
+                    )
                   }
+                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-sm font-semibold text-white focus:border-neutral-500 focus:outline-none"
                 >
-                  {sec.year}년 <span class="opacity-65">({sec.count.toLocaleString()})</span>
-                </button>
-              );
-            })}
-          </nav>
+                  {layout.yearSections.map((sec) => (
+                    <option key={`sticky-opt-${sec.year}`} value={String(sec.year)}>
+                      {sec.year}년 ({sec.count.toLocaleString()}장)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div class="flex items-center gap-2">
+                  <span
+                    data-testid="sticky-active-year"
+                    class="text-base font-semibold tracking-tight text-white"
+                  >
+                    {activeSection.year}년
+                  </span>
+                  <span class="rounded-full border border-neutral-800 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-400">
+                    {activeSection.count.toLocaleString()}장
+                  </span>
+                </div>
+              )}
+
+              {layout.yearSections.length > 1 && (
+                <nav
+                  aria-label="연도 바로가기"
+                  data-testid="year-jump-bar"
+                  class="flex items-center gap-1.5 overflow-x-auto"
+                >
+                  {layout.yearSections.map((sec) => {
+                    const isActive = activeSection?.year === sec.year;
+                    return (
+                      <button
+                        key={`jump-${sec.year}`}
+                        type="button"
+                        data-testid={`year-jump-${sec.year}`}
+                        onClick={() => scrollToYearOffset(sec.headerTop)}
+                        class={
+                          isActive
+                            ? 'shrink-0 rounded-full border border-white/40 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-950 transition'
+                            : 'shrink-0 rounded-full border border-neutral-800 bg-neutral-900/80 px-2.5 py-1 text-xs text-neutral-300 transition hover:border-neutral-600 hover:text-white'
+                        }
+                      >
+                        {sec.year}년
+                      </button>
+                    );
+                  })}
+                </nav>
+              )}
+            </div>
+
+            {props.onStartYearFrame && (
+              <button
+                type="button"
+                data-testid="sticky-year-frame-button"
+                onClick={() => latestProps.onStartYearFrame?.(activeSection.year)}
+                class="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-neutral-950 transition hover:bg-neutral-200"
+              >
+                {activeSection.year}년 액자
+              </button>
+            )}
+          </div>
         )}
 
         <div
