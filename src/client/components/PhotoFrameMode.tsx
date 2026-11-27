@@ -72,13 +72,14 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
 
   const layerA = state<FrameItem | null>(null, renew);
   const layerB = state<FrameItem | null>(null, renew);
-  const activeLayer = state<'A' | 'B'>('A', renew);
-  const slideKey = state<number>(0, renew);
+  const activeLayer = state<'A' | 'B' | null>(null, renew);
+  const layerASlideKey = state<number>(0, renew);
+  const layerBSlideKey = state<number>(0, renew);
 
   const playing = state<boolean>(true, renew);
   const orderMode = state<FrameOrderMode>('newest', renew);
   const intervalSec = state<FrameIntervalSeconds>(5, renew);
-  const effect = state<FrameTransitionEffect>('fade', renew);
+  const effect = state<FrameTransitionEffect>('ken-burns', renew);
   const showOverlayMeta = state<boolean>(true, renew);
   const hudVisible = state<boolean>(true, renew);
   const isFullscreen = state<boolean>(false, renew);
@@ -161,15 +162,17 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
 
       if (layerA.value === null && layerB.value === null) {
         layerA.value = candidate;
+        layerASlideKey.value += 1;
         activeLayer.value = 'A';
       } else if (activeLayer.value === 'A') {
         layerB.value = candidate;
+        layerBSlideKey.value += 1;
         activeLayer.value = 'B';
       } else {
         layerA.value = candidate;
+        layerASlideKey.value += 1;
         activeLayer.value = 'A';
       }
-      slideKey.value += 1;
       scheduleNextAdvance();
     } catch {
       if (disposed || seq !== transitionSeq) return;
@@ -272,7 +275,8 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
     wakeHud();
     if (orderMode.value === nextOrder) return;
     orderMode.value = nextOrder;
-    const activeItem = activeLayer.value === 'A' ? layerA.value : layerB.value;
+    const activeItem =
+      activeLayer.value === 'A' ? layerA.value : activeLayer.value === 'B' ? layerB.value : null;
 
     if (nextOrder === 'random') {
       shuffleQueue = createShuffleQueue(items, latestProps.rng);
@@ -409,7 +413,8 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
 
   return (props) => {
     latestProps = props;
-    const activeItem = activeLayer.value === 'A' ? layerA.value : layerB.value;
+    const activeItem =
+      activeLayer.value === 'A' ? layerA.value : activeLayer.value === 'B' ? layerB.value : null;
     const isKenBurns = effect.value === 'ken-burns';
 
     return (
@@ -424,53 +429,51 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
         onTouchStart={wakeHud}
         class="fixed inset-0 z-50 select-none overflow-hidden bg-black text-white"
       >
-        {/* Double-buffered image layers (DC-8) */}
+        {/* Double-buffered image layers (DC-8): keep both wrappers always mounted with a stable array child so Lithent preserves the layer divs for opacity transitions and honors img keys to restart Ken Burns */}
         <div class="relative h-full w-full">
-          {layerA.value && (
-            <div
-              data-testid="frame-layer-a"
-              data-active={activeLayer.value === 'A' ? 'true' : 'false'}
-              class={`absolute inset-0 flex items-center justify-center transition-opacity duration-[1200ms] ease-in-out ${
-                activeLayer.value === 'A' ? 'z-10 opacity-100' : 'z-0 opacity-0'
-              }`}
-            >
-              <img
-                key={
-                  activeLayer.value === 'A'
-                    ? `a-${layerA.value.id}-${slideKey.value}`
-                    : `a-${layerA.value.id}`
-                }
-                src={layerA.value.displayUrl}
-                alt={layerA.value.caption || '액자 사진'}
-                class={`max-h-full max-w-full object-contain ${
-                  isKenBurns && activeLayer.value === 'A' ? 'r2-ken-burns-active' : ''
-                }`}
-              />
-            </div>
-          )}
+          <div
+            data-testid="frame-layer-a"
+            data-active={activeLayer.value === 'A' ? 'true' : 'false'}
+            aria-hidden={activeLayer.value === 'A' ? 'false' : 'true'}
+            class={`absolute inset-0 flex items-center justify-center transition-opacity duration-[1200ms] ease-in-out ${
+              activeLayer.value === 'A' ? 'z-10 opacity-100' : 'pointer-events-none z-0 opacity-0'
+            }`}
+          >
+            {layerA.value
+              ? [
+                  <img
+                    key={`a-${layerA.value.id}-${layerASlideKey.value}`}
+                    src={layerA.value.displayUrl}
+                    alt={layerA.value.caption || '액자 사진'}
+                    class={`max-h-full max-w-full object-contain ${
+                      isKenBurns ? 'r2-ken-burns-active' : ''
+                    }`}
+                  />,
+                ]
+              : []}
+          </div>
 
-          {layerB.value && (
-            <div
-              data-testid="frame-layer-b"
-              data-active={activeLayer.value === 'B' ? 'true' : 'false'}
-              class={`absolute inset-0 flex items-center justify-center transition-opacity duration-[1200ms] ease-in-out ${
-                activeLayer.value === 'B' ? 'z-10 opacity-100' : 'z-0 opacity-0'
-              }`}
-            >
-              <img
-                key={
-                  activeLayer.value === 'B'
-                    ? `b-${layerB.value.id}-${slideKey.value}`
-                    : `b-${layerB.value.id}`
-                }
-                src={layerB.value.displayUrl}
-                alt={layerB.value.caption || '액자 사진'}
-                class={`max-h-full max-w-full object-contain ${
-                  isKenBurns && activeLayer.value === 'B' ? 'r2-ken-burns-active' : ''
-                }`}
-              />
-            </div>
-          )}
+          <div
+            data-testid="frame-layer-b"
+            data-active={activeLayer.value === 'B' ? 'true' : 'false'}
+            aria-hidden={activeLayer.value === 'B' ? 'false' : 'true'}
+            class={`absolute inset-0 flex items-center justify-center transition-opacity duration-[1200ms] ease-in-out ${
+              activeLayer.value === 'B' ? 'z-10 opacity-100' : 'pointer-events-none z-0 opacity-0'
+            }`}
+          >
+            {layerB.value
+              ? [
+                  <img
+                    key={`b-${layerB.value.id}-${layerBSlideKey.value}`}
+                    src={layerB.value.displayUrl}
+                    alt={layerB.value.caption || '액자 사진'}
+                    class={`max-h-full max-w-full object-contain ${
+                      isKenBurns ? 'r2-ken-burns-active' : ''
+                    }`}
+                  />,
+                ]
+              : []}
+          </div>
 
           {loading.value && (
             <div

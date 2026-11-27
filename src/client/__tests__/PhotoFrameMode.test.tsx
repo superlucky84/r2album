@@ -64,8 +64,20 @@ describe('PhotoFrameMode component', () => {
       expect.any(AbortSignal)
     );
     expect(requestWakeLock).toHaveBeenCalledWith('screen');
-    expect(screen.getByTestId('frame-layer-a').getAttribute('data-active')).toBe('true');
+
+    // Both layer wrappers are mounted from the start so the very first transition crossfades smoothly
+    const layerAEl = screen.getByTestId('frame-layer-a');
+    const layerBEl = screen.getByTestId('frame-layer-b');
+    expect(layerAEl.getAttribute('data-active')).toBe('true');
+    expect(layerBEl.getAttribute('data-active')).toBe('false');
+    expect(layerBEl.className).toContain('opacity-0');
     expect(preloadImage).toHaveBeenCalledWith('/api/media/display/frame-0');
+
+    // Default transition effect is Fade + Ken Burns
+    expect(screen.getByTestId('frame-effect-toggle').textContent).toBe('Fade + Ken Burns');
+    const firstImgNode = layerAEl.querySelector('img');
+    expect(firstImgNode).toBeTruthy();
+    expect(firstImgNode?.className).toContain('r2-ken-burns-active');
 
     // HUD hides after 3 seconds of idle
     await act(async () => {
@@ -73,13 +85,23 @@ describe('PhotoFrameMode component', () => {
     });
     expect(screen.getByTestId('frame-hud').getAttribute('data-visible')).toBe('false');
 
-    // Remaining 2 seconds (total 5s interval) advances to frame-1 on layerB
+    // Remaining 2 seconds (total 5s interval) advances to frame-1 on layerB without remounting layerA's img
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
     expect(preloadImage).toHaveBeenCalledWith('/api/media/display/frame-1');
-    expect(screen.getByTestId('frame-layer-b').getAttribute('data-active')).toBe('true');
-    expect(screen.getByTestId('frame-layer-a').getAttribute('data-active')).toBe('false');
+    expect(screen.getByTestId('frame-layer-b')).toBe(layerBEl);
+    expect(layerBEl.getAttribute('data-active')).toBe('true');
+    expect(layerBEl.className).toContain('opacity-100');
+    expect(layerAEl.getAttribute('data-active')).toBe('false');
+    expect(layerAEl.querySelector('img')).toBe(firstImgNode);
+
+    // Toggling effect switches to Fade-only and removes Ken Burns class
+    await act(() => {
+      fireEvent.click(screen.getByTestId('frame-effect-toggle'));
+    });
+    expect(screen.getByTestId('frame-effect-toggle').textContent).toBe('Fade');
+    expect(layerBEl.querySelector('img')?.className).not.toContain('r2-ken-burns-active');
 
     // Mouse move reveals HUD
     await act(() => {
@@ -106,7 +128,10 @@ describe('PhotoFrameMode component', () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
     expect(preloadImage).toHaveBeenCalledWith('/api/media/display/frame-2');
-    expect(screen.getByTestId('frame-layer-a').getAttribute('data-active')).toBe('true');
+    expect(screen.getByTestId('frame-layer-a')).toBe(layerAEl);
+    expect(layerAEl.getAttribute('data-active')).toBe('true');
+    // New slide on layerA mounts a fresh <img> node so Ken Burns restarts cleanly
+    expect(layerAEl.querySelector('img')).not.toBe(firstImgNode);
 
     // Unmount cleans up timers, listeners, WakeLock, and body overflow
     const callsBeforeUnmount = preloadImage.mock.calls.length;
