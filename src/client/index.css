@@ -13,3 +13,12 @@
   animation: r2-ken-burns 14s ease-out forwards;
   will-change: transform;
 }
+
+.r2-no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.r2-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -14,7 +14,7 @@ export interface VirtualGridProps {
   onStartYearFrame?: (year: number) => void;
 }
 
-const STICKY_TOP_OFFSET = 124; // App header (~57px) + sticky year bar (~56px) + breathing gap
+const STICKY_TOP_OFFSET = 108; // App header (~57px) + compact single-line sticky year bar (~42px) + gap
 
 export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
   let latestProps = initialProps;
@@ -150,58 +150,19 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
       }
     }
 
-    const handleStickyYearSelect = (year: number) => {
-      const target = layout.yearSections.find((sec) => sec.year === year);
-      if (target) {
-        scrollToYearOffset(target.headerTop);
-      }
-    };
-
     return (
       <div class="space-y-3">
         {activeSection && (
           <div
             data-testid="sticky-year-bar"
-            class="sticky top-[57px] z-10 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-neutral-800/90 bg-neutral-950/90 px-3.5 py-2.5 shadow-lg shadow-black/40 backdrop-blur-md"
+            class="sticky top-[57px] z-10 flex flex-nowrap items-center justify-between gap-2 rounded-xl border border-neutral-800/90 bg-neutral-950/90 px-2.5 py-1.5 shadow-lg shadow-black/40 backdrop-blur-md sm:px-3.5"
           >
-            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2.5">
+            <div class="flex min-w-0 flex-1 items-center gap-2">
               {layout.yearSections.length > 1 ? (
-                <select
-                  aria-label="보고 있는 연도 변경"
-                  data-testid="sticky-year-select"
-                  value={String(activeSection.year)}
-                  onChange={(e: Event) =>
-                    handleStickyYearSelect(
-                      Number.parseInt((e.target as HTMLSelectElement).value, 10)
-                    )
-                  }
-                  class="rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-sm font-semibold text-white focus:border-neutral-500 focus:outline-none"
-                >
-                  {layout.yearSections.map((sec) => (
-                    <option key={`sticky-opt-${sec.year}`} value={String(sec.year)}>
-                      {sec.year}년 ({sec.count.toLocaleString()}장)
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div class="flex items-center gap-2">
-                  <span
-                    data-testid="sticky-active-year"
-                    class="text-base font-semibold tracking-tight text-white"
-                  >
-                    {activeSection.year}년
-                  </span>
-                  <span class="rounded-full border border-neutral-800 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-400">
-                    {activeSection.count.toLocaleString()}장
-                  </span>
-                </div>
-              )}
-
-              {layout.yearSections.length > 1 && (
                 <nav
                   aria-label="연도 바로가기"
                   data-testid="year-jump-bar"
-                  class="flex items-center gap-1.5 overflow-x-auto"
+                  class="r2-no-scrollbar flex items-center gap-1.5 overflow-x-auto"
                 >
                   {layout.yearSections.map((sec) => {
                     const isActive = activeSection?.year === sec.year;
@@ -222,6 +183,18 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
                     );
                   })}
                 </nav>
+              ) : (
+                <div class="flex items-center gap-2 truncate">
+                  <span
+                    data-testid="sticky-active-year"
+                    class="text-sm font-semibold tracking-tight text-white"
+                  >
+                    {activeSection.year}년
+                  </span>
+                  <span class="rounded-full border border-neutral-800 bg-neutral-900 px-2 py-0.5 text-[11px] text-neutral-400">
+                    {activeSection.count.toLocaleString()}장
+                  </span>
+                </div>
               )}
             </div>
 
@@ -230,7 +203,7 @@ export const VirtualGrid = mount<VirtualGridProps>((renew, initialProps) => {
                 type="button"
                 data-testid="sticky-year-frame-button"
                 onClick={() => latestProps.onStartYearFrame?.(activeSection.year)}
-                class="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-neutral-950 transition hover:bg-neutral-200"
+                class="shrink-0 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-neutral-950 transition hover:bg-neutral-200"
               >
                 {activeSection.year}년 액자
               </button>

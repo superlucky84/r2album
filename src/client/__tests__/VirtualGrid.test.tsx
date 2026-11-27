@@ -105,10 +105,10 @@ describe('VirtualGrid component', () => {
     expect(screen.getByTestId('year-header-2025').textContent).toContain('2025년');
     expect(screen.getByTestId('sticky-year-frame-button').textContent).toContain('2026년 액자');
 
-    // Selecting 2025 in sticky year select scrolls and updates sticky frame button to 2025
+    // Clicking 2025 pill in sticky year bar scrolls and updates sticky frame button to 2025
     const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
     await act(() => {
-      fireEvent.change(screen.getByTestId('sticky-year-select'), { target: { value: '2025' } });
+      fireEvent.click(screen.getByTestId('year-jump-2025'));
     });
     expect(scrollToSpy).toHaveBeenCalled();
     expect(screen.getByTestId('sticky-year-frame-button').textContent).toContain('2025년 액자');
