@@ -9,13 +9,14 @@ Cloudflare R2(무료 10GB, 송신 트래픽 무료) + Cloudflare D1 + Cloudflare
   - 미등록 Google 계정은 로그인 시도 시 `pending` 가입 신청으로 접수되며, 관리자 승인 전까지 세션이 발급되지 않음
 - **Private R2 미디어 스트리밍**:
   - R2 버킷은 퍼블릭 비공개 유지, `/api/media/:variant/:id`에서 세션 검증 후 `Cache-Control: private, max-age=31536000, immutable` + `ETag`/`304`로 서빙
-- **브라우저 EXIF 추출 & WebP 2종 변환 업로드 (`/admin`)**:
+- **브라우저 EXIF 추출 & WebP 2종 변환 · 백그라운드 업로드 (`/admin`)**:
   - 업로드 전 브라우저에서 JPEG EXIF(`DateTimeOriginal`/`CreateDate`, `Orientation`)를 추출하고 표시용 WebP(최대 2048px, `q=0.82`) + 썸네일 WebP(최대 480px, `q=0.75`)로 변환
-  - 드래그 앤 드롭 다중 업로드(동시성 3 큐), 절감률 표시, 이미지 메타데이터 인라인 수정, **다중 선택 일괄 앨범 이동 · 일괄 태그 추가/제거 · 원클릭 태그 제거**, 단건/일괄 삭제, 앨범 CRUD, 10GB 사용량 게이지 & **9.5 GB 과금 방지 업로드 하드캡**
-- **Virtual Scroll 갤러리 & 라이트박스 (`/`)**:
-  - `CHUNK_SIZE = 40` 구간 Lazy Fetch + 메모리 캐시 + 앨범/태그 필터 + 키보드/스와이프 지원 라이트박스
+  - 드래그 앤 드롭 다중 업로드(동시성 3 전역 백그라운드 큐, 탭/갤러리 이동 중 업로드 유지, 상단 헤더 진행 배지, 자동 Screen Wake Lock & `beforeunload` 이탈 경고), 절감률 표시
+  - 페이지당 `40/100/200/500장` 선택, **촬영일 없음 필터(`hasExifDate=false`)**, 인라인 수정 및 **최대 500건 일괄 앨범 이동 · 일괄 촬영일 설정 · 일괄 태그 추가/제거(원클릭 제거 칩 포함)**, 단건/일괄 삭제, 앨범 CRUD, 10GB 사용량 게이지 & **9.5 GB 과금 방지 업로드 하드캡**
+- **연도별 Virtual Scroll 갤러리 & 라이트박스 (`/`)**:
+  - `CHUNK_SIZE = 40` 구간 Lazy Fetch + 메모리 캐시 + 타임존 반영 **연도별 섹션 묶음** + **모바일 1줄 슬림 Sticky 연도 바(바로가기 칩 + 현재 연도 액자 버튼)** + 앨범/연도/태그 필터 + 키보드/스와이프 지원 라이트박스
 - **전체화면 액자 롤링 모드 (`PhotoFrameMode`)**:
-  - 현재 필터 범위 기준 더블 버퍼링(`layerA`/`layerB`) 프리로드 크로스페이드, 선택적 Ken Burns 줌, 순차/중복 없는 Fisher-Yates 랜덤 셔플, 간격(`3s`/`5s`/`10s`/`30s`), Fullscreen & Screen Wake Lock, 3초 무조작 HUD 자동 숨김
+  - 현재 필터(전체/앨범/연도/태그) 및 각 연도별 원클릭 액자 버튼 지원, 더블 버퍼링(`layerA`/`layerB`) 프리로드 크로스페이드, 선택적 Ken Burns 줌, 순차/중복 없는 Fisher-Yates 랜덤 셔플, 간격(`3s`/`5s`/`10s`/`30s`), Fullscreen & Screen Wake Lock, 3초 무조작 HUD 자동 숨김
 
 ---
 
@@ -174,7 +175,7 @@ pnpm deploy
 
 ### 6. 배포 후 수동 검증
 
-배포된 HTTPS 도메인에서 [`docs/MANUAL_TEST_CHECKLIST.md`](./docs/MANUAL_TEST_CHECKLIST.md)의 `M-1` ~ `M-11` 항목을 순서대로 확인합니다.
+배포된 HTTPS 도메인에서 [`docs/MANUAL_TEST_CHECKLIST.md`](./docs/MANUAL_TEST_CHECKLIST.md)의 `M-1` ~ `M-13` 항목을 순서대로 확인합니다.
 
 ---
 

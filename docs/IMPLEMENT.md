@@ -5,7 +5,7 @@
 > **작성 규칙 (`doc-driven-designer-v1`):**
 > - 모든 Phase는 `Refs:` 라인, 진입 조건(Entry Criteria), 구현 체크리스트, 기본 테스트(Baseline Tests), 종료 조건(Exit Criteria)을 포함한다.
 > - `Files:` 블록은 계획 단계에서는 작성하지 않으며, 해당 Phase 구현 완료 시 git 상태(`git status --porcelain -uall`, `git diff --name-status`)를 기준으로 기록한다.
-> - 모든 핵심 설계 결정(`DC-1` ~ `DC-10`)이 확정되었으며, 추후 계약 변경 시 문서를 먼저 갱신한 뒤 코드를 수정한다.
+> - 모든 핵심 설계 결정(`DC-1` ~ `DC-15`)이 확정되었으며, 추후 계약 변경 시 문서를 먼저 갱신한 뒤 코드를 수정한다.
 
 ---
 
@@ -330,20 +330,78 @@ Files:
 
 ---
 
+## Phase 9 — 운영 UX 고도화: 대량 정리, 9.5 GB 하드캡, 연도별 Virtual Scroll/액자 & 백그라운드 업로드: done
+
+Refs: RQ-8, RQ-10, RQ-11, RQ-13, RQ-14, RQ-15, DC-12, DC-13, DC-14, DC-15, M-12, M-13
+
+### Entry Criteria
+- Phase 1 ~ Phase 7 구현 및 Phase 8 로컬 E2E·배포 가이드 완료.
+- 실사용 테스트 중 도출된 대량 관리·과금 방지·연도별 탐색·모바일 업로드 요구사항 확정 (`DC-12` ~ `DC-15`).
+
+### Implementation Checklist
+- [x] **일괄 앨범 이동 · 촬영일 설정 · 태그 추가/제거 (`POST /api/admin/images/bulk-update`):** 최대 500건 지원, `ImageManageTable` 일괄 작업 바(앨범 이동, `datetime-local` 일괄 촬영일 적용, 태그 추가/제거, 선택된 사진의 태그 원클릭 제거 칩) 구현.
+- [x] **관리자 페이징 선택 & 촬영일 없음 필터:** `40/100/200/500장씩 보기` 선택기(`MAX_PAGE_LIMIT = 500`, `BULK_DELETE_MAX = 500`), `?hasExifDate=false|true` 촬영일 유무 필터, Cloudflare D1 100바인드·R2 1,000키 제한 대응 청크 분할(D1 `IN` 50건, 멀티로우 태그 40쌍, R2 삭제 500키).
+- [x] **R2 무료 티어 9.5 GB 하드캡 & 설정 분리:** `R2_STORAGE_HARD_CAP_BYTES = 9,500,000,000` (`MAX_STORAGE_BYTES` 오버라이드, 초과 시 `507 STORAGE_LIMIT_EXCEEDED`), `StorageGauge` 안내 문구, `wrangler.example.jsonc` 템플릿 분리 및 `wrangler.jsonc` `.gitignore` 처리(`scripts/e2e-local.mjs` 자동 fallback 포함).
+- [x] **연도별 Virtual Scroll · 모바일 1줄 Sticky 연도 바 · 연도별 액자 모드:** 타임존(`tzOffset`) 반영 연도 집계(`GET /api/images`, `GET /api/filters`), `?year=YYYY&tzOffset=` 인덱스 범위 필터(`GET /api/images`, `GET /api/images/ids`), `virtualGrid.ts` 연도 섹션 계산, 모바일 1줄 슬림 Sticky 연도 바(연도 바로가기 칩 + 현재 연도 액자 버튼), 필터바 연도 선택 및 각 연도 섹션 헤더 `YYYY년 액자` 버튼 구현.
+- [x] **전역 백그라운드 업로드 스토어 (`src/client/stores/uploadStore.ts`):** 탭/갤러리 이동 중 업로드 지속, `App` 상단 헤더 `업로드 N/M` 배지, 업로드 중 자동 Screen Wake Lock 및 `beforeunload` 이탈 경고·`overscroll-y-contain` 적용.
+
+### Baseline Tests
+- Worker: 일괄 앨범 이동·태그 추가/제거·촬영일 설정, 120건(> D1 100변수) 청크 분할 조회/수정/삭제, `507 STORAGE_LIMIT_EXCEEDED` 하드캡 및 삭제 후 복구, UTC/KST 경계 연도 집계 및 `?year=` 필터, `viewer`의 `bulk-update` 403 차단 테스트.
+- Client: `ImageManageTable` 일괄 작업·페이지 크기 변경·촬영일 없음 필터, `virtualGrid.ts` 30,000건 연도 섹션 계산, `VirtualGrid` 1줄 Sticky 연도 바·바로가기·연도 액자, `FilterBar` 연도 선택, `PhotoFrameMode` 연도 필터, `uploadStore` 언마운트 지속·Wake Lock·`beforeunload` 테스트.
+- 전체 정적 검사(`format:check`, `type-check`, `lint`), `vitest run`(22파일 78테스트), `vite build`, `pnpm test:e2e:local` 통과.
+
+### Exit Criteria
+- 대량 관리(최대 500건), 촬영일 누락 보정, 9.5 GB 과금 방지, 연도별 가상 스크롤/액자, 백그라운드 업로드가 모두 자동화 테스트로 검증되고 프로덕션 배포 가능한 상태가 된다.
+
+Files:
+- `.gitignore` (modified)
+- `README.md` (modified)
+- `docs/DESIGN.md` (modified)
+- `docs/IMPLEMENT.md` (modified)
+- `docs/MANUAL_TEST_CHECKLIST.md` (modified)
+- `docs/REQUIREMENTS.md` (modified)
+- `scripts/e2e-local.mjs` (modified)
+- `src/client/App.tsx` (modified)
+- `src/client/__tests__/AlbumManager.test.tsx` (modified)
+- `src/client/__tests__/App.test.tsx` (modified)
+- `src/client/__tests__/FilterBar.test.tsx` (modified)
+- `src/client/__tests__/ImageManageTable.test.tsx` (modified)
+- `src/client/__tests__/PhotoFrameMode.test.tsx` (modified)
+- `src/client/__tests__/VirtualGrid.test.tsx` (modified)
+- `src/client/__tests__/uploadStore.test.tsx` (added)
+- `src/client/__tests__/virtualGrid.test.ts` (modified)
+- `src/client/api/admin.ts` (modified)
+- `src/client/components/FilterBar.tsx` (modified)
+- `src/client/components/GalleryView.tsx` (modified)
+- `src/client/components/PhotoFrameMode.tsx` (modified)
+- `src/client/components/VirtualGrid.tsx` (modified)
+- `src/client/components/admin/AdminView.tsx` (modified)
+- `src/client/components/admin/ImageManageTable.tsx` (modified)
+- `src/client/components/admin/StorageGauge.tsx` (modified)
+- `src/client/components/admin/UploadDropzone.tsx` (modified)
+- `src/client/index.css` (modified)
+- `src/client/lib/virtualGrid.ts` (modified)
+- `src/client/stores/galleryStore.ts` (modified)
+- `src/client/stores/uploadStore.ts` (added)
+- `src/shared/constants.ts` (modified)
+- `src/shared/types.ts` (modified)
+- `src/worker/__tests__/api.test.ts` (modified)
+- `src/worker/__tests__/hardening.test.ts` (modified)
+- `src/worker/env.ts` (modified)
+- `src/worker/routes/admin.ts` (modified)
+- `src/worker/routes/images.ts` (modified)
+- `wrangler.jsonc` -> `wrangler.example.jsonc` (renamed)
+
+---
+
 ## Handoff
 
 - **Completed:**
-  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 작성 및 설계 결정(`DC-1`~`DC-11`) 전원 확정 완료 (`86172d4`).
-  - `Phase 1 — 프로젝트 스캐폴딩 & Cloudflare Workers/D1/R2 기반 구축` 완료 및 커밋·푸시 (`3c004c8`).
-  - `Phase 2 — Google OAuth 2.0 인증, 세션 쿠키, RBAC & 가입 신청/승인 플로우` 완료 및 커밋·푸시 (`ba503d5`).
-  - `Phase 3 — 이미지 메타데이터/업로드/삭제 API & Private R2 미디어 서빙` 완료 및 커밋·푸시 (`ae8cfa7`).
-  - `Phase 4 — 관리자 페이지 (/admin): EXIF 추출, WebP 변환 & 다중 업로드/관리 UI` & `Phase 5 — 프론트 갤러리` 완료 및 커밋 (`47141ef`).
-  - `Phase 6 — 전체화면 액자 롤링 모드 (Photo Frame Mode)` 완료 및 커밋 (`35046b8`).
-  - `Phase 7 — Test Hardening (보안 · 경계 조건 · 성능 · 장애 복구 보강)` 완료 및 커밋 (`119c551`).
-  - `Phase 8 — Integration Test & Cloudflare 배포 검증` 로컬 통합 테스트(`pnpm test:e2e:local`, 실제 `dist/client` + `wrangler dev` Miniflare D1/R2 통과) 및 배포 가이드(`README.md`) 완료 (`4eaa5cd`).
-  - 추가 UX/안전 보강 완료: 다중 선택 일괄 앨범 이동·일괄 태그 추가/제거 (`POST /api/admin/images/bulk-update`, `a0c85e1`), R2 9.5 GB 무료 티어 보호 하드캡(`507 STORAGE_LIMIT_EXCEEDED`) 및 `wrangler.example.jsonc` 템플릿 분리 / `wrangler.jsonc` `.gitignore` 처리 (`9b05cc4`, 21파일 70테스트 + 로컬 Wrangler E2E 전체 통과).
+  - `docs/REQUIREMENTS.md`, `docs/DESIGN.md`, `docs/IMPLEMENT.md`, `docs/MANUAL_TEST_CHECKLIST.md` 4종 문서 및 `DC-1`~`DC-15` 전원 확정·동기화 완료.
+  - `Phase 1` (`3c004c8`) ~ `Phase 7` (`119c551`) 및 `Phase 8` 로컬 E2E/배포 가이드 (`4eaa5cd`) 완료.
+  - `Phase 9 — 운영 UX 고도화` 완료 및 푸시 (`a0c85e1`, `9b05cc4`, `e6462e9`, `cfc02a8`, `730e595`, `bdef8db`, `0baf97d`, `dbc538d`): 일괄 앨범 이동·촬영일 설정·태그 추가/제거, 40/100/200/500장 페이징 + D1/R2 청크 분할, 촬영일 없음 필터, R2 9.5 GB 하드캡, `wrangler.example.jsonc` 분리, 연도별 Virtual Scroll + 모바일 1줄 Sticky 연도 바 + 연도별 액자 모드, 전역 백그라운드 업로드 스토어 + Wake Lock + 헤더 배지 (22파일 78테스트 + 로컬 Wrangler E2E 전체 통과).
 - **Next Step:**
-  - `pnpm deploy`로 최신 변경 사항 반영 후 운영 도메인에서 `MANUAL_TEST_CHECKLIST.md` (`M-1`~`M-11`) 최종 수동 검증 및 Phase 8 `done` 마감.
+  - `pnpm deploy`로 최신 변경 사항 운영 반영 후 실도메인에서 `MANUAL_TEST_CHECKLIST.md` (`M-1`~`M-13`) 최종 수동 검증 및 `Phase 8` `done` 마감.
 - **Blockers:**
-  - 없음 (Cloudflare D1/R2/Secrets/OAuth 프로비저닝 및 최초 배포 완료).
-- **Latest Commit SHA:** `9b05cc4`
+  - 없음 (Cloudflare D1/R2/Secrets/OAuth 프로비저닝 완료; 사내망에서는 `*.workers.dev` DNS 차단되므로 모바일 LTE/5G 또는 커스텀 도메인으로 확인).
+- **Latest Commit SHA:** `dbc538d`

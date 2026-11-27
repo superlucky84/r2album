@@ -39,45 +39,56 @@ r2album/
 │   ├── IMPLEMENT.md
 │   └── MANUAL_TEST_CHECKLIST.md
 ├── migrations/
-│   └── 0001_init.sql
+│   ├── 0001_init.sql
+│   └── 0002_user_approval.sql
+├── scripts/
+│   └── e2e-local.mjs           # 빌드 SPA + Wrangler Miniflare D1/R2 로컬 E2E 스크립트
 ├── src/
 │   ├── shared/                 # 클라이언트/워커 공용 타입·상수·유틸
 │   │   ├── types.ts
 │   │   └── constants.ts
 │   ├── worker/                 # Cloudflare Worker (Hono API)
 │   │   ├── index.ts            # 라우터 조립 및 에러 핸들러
-│   │   ├── env.ts              # Bindings 타입 (DB, MEDIA_BUCKET, Secrets)
+│   │   ├── env.ts              # Bindings 타입 (DB, MEDIA_BUCKET, Secrets, MAX_STORAGE_BYTES)
+│   │   ├── validation.ts       # WebP 매직 바이트·캡션·태그·앨범·이메일 검증
 │   │   ├── auth/
 │   │   │   ├── google.ts       # OAuth URL 생성, 코드 교환, userinfo/ID 검증
 │   │   │   ├── session.ts      # HMAC-SHA256 HttpOnly 쿠키 서명/검증
 │   │   │   └── middleware.ts   # requireAuth, requireAdmin
 │   │   └── routes/
 │   │       ├── auth.ts         # /auth/google, /auth/callback, /auth/logout, /api/me
-│   │       ├── images.ts       # /api/images (구간조회), /api/images/ids (롤링용), /api/filters
+│   │       ├── images.ts       # /api/images (구간·연도·EXIF필터), /api/images/ids, /api/filters
 │   │       ├── media.ts        # /api/media/:variant/:id (Private R2 스트리밍)
-│   │       └── admin.ts        # /api/admin/images (업로드/수정/삭제), albums, users, stats
+│   │       └── admin.ts        # /api/admin/images (업로드/수정/일괄수정/삭제), albums, users, stats
 │   └── client/                 # Lithent CSR SPA
-│       ├── index.tsx           # 엔트리 + 클라이언트 라우터 (/, /admin, /login)
-│       ├── api/                # Typed fetch wrapper
-│       ├── stores/             # lstore / store (인증, 필터, 청크 캐시)
+│       ├── index.tsx           # 엔트리 + App 마운트
+│       ├── App.tsx             # 인증 가드, 라우터(/, /admin, /login), 헤더 업로드 진행 배지
+│       ├── api/                # Typed fetch wrapper (client.ts, admin.ts)
+│       ├── stores/
+│       │   ├── galleryStore.ts # 청크 캐시, 연도 메타, generation 무효화 스토어
+│       │   └── uploadStore.ts  # 전역 백그라운드 업로드 큐 + Wake Lock + beforeunload
 │       ├── lib/
-│       │   ├── exif.ts         # 경량 EXIF DateTimeOriginal & Orientation 파서
+│       │   ├── exif.ts         # 순수 바이너리 JPEG EXIF DateTimeOriginal & Orientation 파서
 │       │   ├── imageResize.ts  # Canvas WebP 변환 (2048px display + 480px thumb)
-│       │   ├── virtualGrid.ts  # 반응형 컬럼·행·청크 범위 순수 계산 로직
-│       │   └── shuffle.ts      # Fisher-Yates 중복 없는 셔플 큐
+│       │   ├── virtualGrid.ts  # 반응형 컬럼·연도 섹션·청크 범위 순수 계산 로직
+│       │   ├── shuffle.ts      # Fisher-Yates 중복 없는 셔플 큐
+│       │   ├── format.ts       # 바이트·날짜·태그 포맷 유틸
+│       │   └── router.ts       # SPA 히스토리 라우터 헬퍼
 │       └── components/
 │           ├── LoginView.tsx
 │           ├── GalleryView.tsx
-│           ├── VirtualGrid.tsx
-│           ├── FilterBar.tsx
+│           ├── VirtualGrid.tsx # 연도 섹션 헤더 + 모바일 1줄 Sticky 연도 바 + 가상 그리드
+│           ├── FilterBar.tsx   # 앨범·연도·태그 필터 + 액자 모드 버튼
 │           ├── LightboxModal.tsx
 │           ├── PhotoFrameMode.tsx
 │           └── admin/
 │               ├── AdminView.tsx
+│               ├── StorageGauge.tsx
 │               ├── UploadDropzone.tsx
 │               ├── ImageManageTable.tsx
 │               ├── AlbumManager.tsx
-│               └── UserAllowlistManager.tsx
+│               ├── UserAllowlistManager.tsx
+│               └── ConfirmModal.tsx
 ├── index.html
 ├── package.json
 ├── tsconfig.json
@@ -103,6 +114,10 @@ r2album/
 | `DC-9` | [x] | **Lithent 컴포넌트/테스트 규약** | 복잡한 상태 컨테이너(`VirtualGrid`, `PhotoFrameMode`, `UploadDropzone`)는 `mount`+`state`, 단순 UI는 `lmount`+`lstate` 사용(컴포넌트 내 모드 혼용 금지). 모든 리스트 `key` 필수. 테스트는 `vitest` + `lithent/test` + `@testing-library/dom`. | `Phase 4~7` |
 | `DC-10` | [x] | **로컬 개발 서버 구성** | **확정: `wrangler.jsonc` Static Assets + 개발 시 `vite`(프론트 HMR, `/api` 및 `/auth`를 `wrangler dev`로 프록시) 병행 실행.** Vite 8 + `@lithent/lithent-vite` 조합의 플러그인 호환성 위험을 피하면서, 배포 시에는 `vite build` → `wrangler deploy`로 단일 Cloudflare Worker에 통합됨. | `Phase 1`, `M-10` |
 | `DC-11` | [x] | **OAuth 가입 신청 & 관리자 승인 플로우** | **확정: `allowed_users`에 `status('pending' \| 'approved' \| 'rejected')`와 `name` 컬럼 추가(`migrations/0002_user_approval.sql`).** 미등록 Google 계정이 OAuth 콜백에 도달하면 대기열 상한(`MAX_PENDING_USERS = 100`) 내에서 `status='pending'`으로 자동 등록 후 `/login?status=pending` 리다이렉트(세션 쿠키 미발급). `approved` 상태만 세션 발급·API 허용. | `Phase 2`, `Phase 3`, `Phase 4`, `M-11` |
+| `DC-12` | [x] | **R2 무료 티어 9.5 GB 하드캡 & 설정 분리** | **확정: `R2_STORAGE_HARD_CAP_BYTES = 9,500,000,000` (9.5 GB decimal, `MAX_STORAGE_BYTES`로 조정 가능).** R2 쓰기 전 누적 바이트 초과 시 `507 STORAGE_LIMIT_EXCEEDED`로 차단. 개인 D1 ID·이메일 보호를 위해 `wrangler.example.jsonc`만 Git 추적하고 실제 `wrangler.jsonc`는 `.gitignore` 처리. | `Phase 9`, `M-12` |
+| `DC-13` | [x] | **관리자 대량 정리(최대 500건) & D1/R2 청크 분할** | **확정: 관리자 페이지당 `40/100/200/500`장 선택 + 촬영일 없음 필터(`hasExifDate=false`) + `POST /api/admin/images/bulk-update`(앨범·`takenAt`·태그 추가/제거).** Cloudflare D1의 쿼리당 100바인드 제한과 R2 1,000키 제한을 피하기 위해 D1 `IN` 쿼리는 50건, 멀티로우 태그 삽입은 40쌍(80파라미터), R2 삭제는 500키 단위로 분할 실행. | `Phase 9`, `M-12` |
+| `DC-14` | [x] | **타임존 반영 연도별 Virtual Scroll & 1줄 Sticky 연도 바** | **확정: `offset=0` 및 `/api/filters?tzOffset=` 응답에 `years: [{ year, count }]` 포함.** `virtualGrid.ts`가 연도별 섹션 높이·행 배치를 사전 계산해 3만 장에서도 `CHUNK_SIZE = 40` Lazy Fetch를 유지. `?year=YYYY&tzOffset=`는 `idx_images_taken_desc`를 타는 UTC 범위 쿼리로 처리하며, 모바일에서도 1줄을 유지하는 슬림 Sticky 연도 바(`연도 칩` + `YYYY년 액자`)를 제공. | `Phase 9`, `M-13` |
+| `DC-15` | [x] | **전역 백그라운드 업로드 스토어** | **확정: `src/client/stores/uploadStore.ts` 싱글턴(`globalUploadStore`)으로 업로드 큐를 컴포넌트 외부로 분리.** 탭/갤러리 이동 중에도 업로드 지속, 상단 헤더 진행 배지(`업로드 N/M`), 업로드 중 자동 Screen Wake Lock 및 `beforeunload` 이탈 경고·`overscroll-y-contain` 적용. | `Phase 9`, `M-12` |
 
 ---
 
@@ -237,21 +252,24 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
    - 표시용: 긴 변 최대 `2048px` (원본이 더 작으면 확대하지 않음), `image/webp`, quality `0.82`.
    - 썸네일: 긴 변 최대 `480px`, `image/webp`, quality `0.75`.
    - 크기 검증: 표시용 최대 `5MB`, 썸네일 최대 `500KB` 초과 시 품질 단계적 하향 또는 오류 안내.
-3. **업로드 큐 (`UploadDropzone.tsx`):**
-   - 다중 선택 파일을 동시성 `3`으로 순차 변환 → 업로드하며 파일별 상태(`queued` → `processing` → `uploading` → `done` | `error`)와 용량 절감률(원본 대비 변환 후 크기)을 표시한다.
+3. **전역 백그라운드 업로드 큐 (`uploadStore.ts` + `UploadDropzone.tsx`):**
+   - 다중 선택 파일을 앱 전역 스토어(`globalUploadStore`)에서 동시성 `3`으로 순차 변환 → 업로드하며 파일별 상태(`queued` → `processing` → `uploading` → `done` | `error`)와 용량 절감률을 표시한다.
+   - 탭이나 갤러리로 이동해도 백그라운드에서 계속 진행되며, 상단 헤더에 진행 배지(`업로드 N/M`)를 표시하고 진행 중 자동으로 Screen Wake Lock 및 `beforeunload` 이탈 경고를 활성화한다.
 
-### 6.2 Virtual Scroll + 구간 Fetch (`VirtualGrid.tsx` + `virtualGrid.ts`)
+### 6.2 연도별 Virtual Scroll + 구간 Fetch (`VirtualGrid.tsx` + `virtualGrid.ts`)
 - **순수 계산 모듈 (`virtualGrid.ts`):**
-  - 컨테이너 너비에 따른 반응형 컬럼 수(`2~6열`), 정사각/4:3 고정 카드 높이, 행 간격(`gap`)으로 `totalRows = Math.ceil(total / columns)`와 전체 가상 높이 `totalHeight`를 계산한다.
-  - `scrollTop`, `viewportHeight`로부터 보이는 행 범위 `[startRow, endRow]` → 인덱스 범위 `[startIndex, endIndex]` → 필요한 청크 번호 목록 `chunkIndex = Math.floor(index / 40)`(overscan ±1청크)을 산출한다.
+  - 컨테이너 너비에 따른 반응형 컬럼 수(`2~6열`), 정사각 고정 카드 높이, 행 간격(`gap`)과 서버가 반환한 타임존별 연도 장수(`years: [{ year, count }]`)로 각 연도 섹션의 `headerTop`/`gridTop`/`bottom` 및 전체 가상 높이 `totalHeight`를 계산한다(연도 메타 미제공 시 플랫 그리드로 안전 폴백).
+  - `scrollTop`, `viewportHeight`로부터 보이는 연도 헤더(`visibleHeaders`)와 카드 셀(`visibleCells`) 및 필요한 청크 번호 목록 `chunkIndex = Math.floor(index / 40)`(overscan ±1청크)을 산출한다.
+- **모바일 1줄 Sticky 연도 바:**
+  - 상단 글로벌 헤더 바로 아래(`sticky top-[57px]`)에 고정되며, 왼쪽 가로 스와이프 연도 칩(`2026년`, `2025년`, …)으로 원하는 연도 섹션에 즉시 점프하고 오른쪽 버튼으로 현재 보고 있는 연도의 액자 모드를 원클릭 실행한다.
 - **캐시 및 중복 요청 방지:**
   - `Map<number, ImageItem[]>` 청크 캐시 + `Set<number>` in-flight 요청 추적 + 빠른 스크롤 시 `requestAnimationFrame` 스로틀링.
   - 아직 로딩 중인 슬롯은 스켈레톤 카드를 렌더링해 레이아웃 흔들림(CLS)을 방지한다.
-  - 앨범/태그 필터 변경 시 `scrollTop = 0`, 청크 캐시·in-flight 토큰(요청 세대 번호 `generation`)을 증가시켜 이전 필터의 늦은 응답을 무시한다.
+  - 앨범/연도/태그 필터 변경 시 `scrollTop = 0`, 청크 캐시·in-flight 토큰(요청 세대 번호 `generation`)을 증가시켜 이전 필터의 늦은 응답을 무시한다.
 
 ### 6.3 전체화면 액자 롤링 모드 (`PhotoFrameMode.tsx`)
-- **진입/종료:** 갤러리 상단 `액자 모드` 버튼 클릭 시 오버레이 마운트 + Fullscreen API 요청(`ESC` 또는 닫기 버튼으로 종료, Screen Wake Lock API 지원 브라우저에서는 화면 꺼짐 방지 요청).
-- **데이터 소스:** 현재 선택된 필터(전체 / 특정 앨범 / 특정 태그) 기준으로 `/api/images/ids`를 1회 조회.
+- **진입/종료:** 갤러리 상단 `액자 모드` 버튼 또는 Sticky 연도 바 / 각 연도 섹션 헤더의 `YYYY년 액자` 버튼 클릭 시 오버레이 마운트 + Fullscreen API 요청(`ESC` 또는 닫기 버튼으로 종료, Screen Wake Lock API 지원 브라우저에서는 화면 꺼짐 방지 요청).
+- **데이터 소스:** 현재 선택된 필터(전체 / 특정 앨범 / 특정 연도 / 특정 태그 및 조합) 기준으로 `/api/images/ids`를 1회 조회.
 - **재생 모드:**
   - `sequential`: 최신순(또는 오래된순) 순환.
   - `random`: `shuffle.ts`의 Fisher-Yates 셔플 큐로 모든 사진을 중복 없이 1회씩 보여준 뒤 재셔플(직전 마지막 사진과 새 큐 첫 사진이 겹치지 않도록 보정).
