@@ -49,8 +49,8 @@ describe('PhotoFrameMode component', () => {
 
     render(
       <PhotoFrameMode
-        filter={{ albumId: 'alb-jeju', tag: '바다' }}
-        filterLabel="제주 여행 · #바다"
+        filter={{ albumId: 'alb-jeju', tag: '바다', year: 2025 }}
+        filterLabel="제주 여행 · 2025년 · #바다"
         onClose={onClose}
         fetchIds={fetchIds}
         preloadImage={preloadImage}
@@ -60,7 +60,7 @@ describe('PhotoFrameMode component', () => {
     await flushMicrotasks();
 
     expect(fetchIds).toHaveBeenCalledWith(
-      { albumId: 'alb-jeju', tag: '바다' },
+      expect.objectContaining({ albumId: 'alb-jeju', tag: '바다', year: 2025 }),
       expect.any(AbortSignal)
     );
     expect(requestWakeLock).toHaveBeenCalledWith('screen');

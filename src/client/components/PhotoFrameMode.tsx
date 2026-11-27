@@ -1,7 +1,7 @@
 import { mount, mountCallback, ref } from 'lithent';
 import { state } from 'lithent/helper';
 import type { FrameIdsResponse, FrameItem } from '@/shared/types';
-import { fetchFrameIds } from '@/client/api/admin';
+import { type FetchFrameIdsParams, fetchFrameIds } from '@/client/api/admin';
 import { formatDateTime } from '@/client/lib/format';
 import { type ShuffleQueue, createShuffleQueue } from '@/client/lib/shuffle';
 import type { GalleryFilter } from '@/client/stores/galleryStore';
@@ -14,10 +14,7 @@ export interface PhotoFrameModeProps {
   filter: GalleryFilter;
   filterLabel?: string;
   onClose: () => void;
-  fetchIds?: (
-    params: { albumId?: string; tag?: string },
-    signal?: AbortSignal
-  ) => Promise<FrameIdsResponse>;
+  fetchIds?: (params: FetchFrameIdsParams, signal?: AbortSignal) => Promise<FrameIdsResponse>;
   preloadImage?: (url: string) => Promise<void>;
   rng?: () => number;
 }
@@ -361,10 +358,14 @@ export const PhotoFrameMode = mount<PhotoFrameModeProps>((renew, initialProps) =
     scheduleHudAutoHide();
 
     const doFetchIds = latestProps.fetchIds ?? fetchFrameIds;
+    const frameYear = latestProps.filter.year ?? undefined;
     void doFetchIds(
       {
         albumId: latestProps.filter.albumId ?? undefined,
         tag: latestProps.filter.tag ?? undefined,
+        ...(frameYear !== undefined
+          ? { year: frameYear, tzOffset: -new Date().getTimezoneOffset() }
+          : {}),
       },
       controller.signal
     )

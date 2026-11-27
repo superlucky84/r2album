@@ -5,18 +5,26 @@ import type {
   ImageItem,
   ImagesRangeResponse,
   TagSummary,
+  YearGroupSummary,
 } from '@/shared/types';
 import { type FetchImagesParams, fetchFilters, fetchImages } from '@/client/api/admin';
 
 export interface GalleryFilter {
   albumId: string | null;
   tag: string | null;
+  year?: number | null;
 }
 
 export interface GallerySnapshot {
-  filter: GalleryFilter;
+  filter: {
+    albumId: string | null;
+    tag: string | null;
+    year: number | null;
+  };
   albums: AlbumSummary[];
   tags: TagSummary[];
+  availableYears: YearGroupSummary[];
+  years: YearGroupSummary[];
   totalAllImages: number;
   total: number;
   initialLoaded: boolean;
@@ -51,9 +59,15 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
   const doFetchImages = deps.fetchImages ?? fetchImages;
   const chunkSize = deps.chunkSize ?? CHUNK_SIZE;
 
-  let filter: GalleryFilter = { albumId: null, tag: null };
+  let filter: { albumId: string | null; tag: string | null; year: number | null } = {
+    albumId: null,
+    tag: null,
+    year: null,
+  };
   let albums: AlbumSummary[] = [];
   let tags: TagSummary[] = [];
+  let availableYears: YearGroupSummary[] = [];
+  let years: YearGroupSummary[] = [];
   let totalAllImages = 0;
   let total = 0;
   let initialLoaded = false;
@@ -78,6 +92,8 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
     filter: { ...filter },
     albums,
     tags,
+    availableYears,
+    years,
     totalAllImages,
     total,
     initialLoaded,
@@ -112,6 +128,9 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
       if (disposed) return;
       albums = res.albums;
       tags = res.tags;
+      if (Array.isArray(res.years)) {
+        availableYears = res.years;
+      }
       totalAllImages = res.totalImages;
     } catch (err: unknown) {
       if (disposed) return;
@@ -134,12 +153,15 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
     notify();
 
     try {
+      const tzOffset = -new Date().getTimezoneOffset();
       const res = await doFetchImages(
         {
           offset: chunkIndex * chunkSize,
           limit: chunkSize,
           albumId: filter.albumId ?? undefined,
           tag: filter.tag ?? undefined,
+          year: filter.year ?? undefined,
+          ...(chunkIndex === 0 || filter.year !== null ? { tzOffset } : {}),
         },
         signal
       );
@@ -151,6 +173,9 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
 
       chunks.set(chunkIndex, res.items);
       total = res.total;
+      if (Array.isArray(res.years)) {
+        years = res.years;
+      }
       initialLoaded = true;
       error = null;
     } catch (err: unknown) {
@@ -198,8 +223,14 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
   const setFilter = async (next: Partial<GalleryFilter>) => {
     const nextAlbumId = 'albumId' in next ? (next.albumId ?? null) : filter.albumId;
     const nextTag = 'tag' in next ? (next.tag ?? null) : filter.tag;
+    const nextYear = 'year' in next ? (next.year ?? null) : filter.year;
 
-    if (nextAlbumId === filter.albumId && nextTag === filter.tag && initialLoaded) {
+    if (
+      nextAlbumId === filter.albumId &&
+      nextTag === filter.tag &&
+      nextYear === filter.year &&
+      initialLoaded
+    ) {
       return;
     }
 
@@ -207,9 +238,10 @@ export function createGalleryStore(deps: GalleryStoreDeps = {}): GalleryStore {
     activeController = new AbortController();
 
     generation += 1;
-    filter = { albumId: nextAlbumId, tag: nextTag };
+    filter = { albumId: nextAlbumId, tag: nextTag, year: nextYear };
     chunks.clear();
     inFlight.clear();
+    years = [];
     total = 0;
     initialLoaded = false;
     error = null;

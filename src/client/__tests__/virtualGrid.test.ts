@@ -94,4 +94,58 @@ describe('virtualGrid pure calculation', () => {
     expect(pastBottom.endIndex).toBe(99);
     expect(pastBottom.chunkIndices[pastBottom.chunkIndices.length - 1]).toBe(2);
   });
+
+  it('computes year-grouped sections, headers, non-overlapping row starts, and chunk ranges for 30,000 items', () => {
+    const years = [
+      { year: 2026, count: 3 }, // partial first row (3 items in 6 cols) -> 2025 starts on new section!
+      { year: 2025, count: 15_000 },
+      { year: 2024, count: 14_997 },
+    ];
+
+    const topLayout = computeVirtualGridLayout({
+      total: 30_000,
+      years,
+      containerWidth: 1280, // 6 cols
+      viewportHeight: 900,
+      scrollTop: 0,
+    });
+
+    expect(topLayout.yearSections).toHaveLength(3);
+    expect(topLayout.yearSections[0]).toMatchObject({
+      year: 2026,
+      startIndex: 0,
+      endIndex: 2,
+      rows: 1,
+    });
+    expect(topLayout.yearSections[1]).toMatchObject({
+      year: 2025,
+      startIndex: 3,
+      endIndex: 15_002,
+    });
+    expect(topLayout.yearSections[2]).toMatchObject({
+      year: 2024,
+      startIndex: 15_003,
+      endIndex: 29_999,
+    });
+
+    // Top viewport shows 2026 and 2025 headers, with bounded DOM cells
+    expect(topLayout.visibleHeaders.map((h) => h.year)).toEqual([2026, 2025]);
+    expect(topLayout.visibleCells.length).toBeLessThan(80);
+    // 2025 first cell (index 3) starts at column 0 (left = 0) under 2025 header
+    const first2025Cell = topLayout.visibleCells.find((c) => c.index === 3);
+    expect(first2025Cell?.left).toBe(0);
+    expect(first2025Cell?.top).toBe(topLayout.yearSections[1].gridTop);
+
+    // Jumping directly to 2024 section headerTop computes only chunks near index 15,003 (chunk 375)
+    const jump2024 = computeVirtualGridLayout({
+      total: 30_000,
+      years,
+      containerWidth: 1280,
+      viewportHeight: 900,
+      scrollTop: topLayout.yearSections[2].headerTop,
+    });
+    expect(jump2024.visibleHeaders.map((h) => h.year)).toContain(2024);
+    expect(jump2024.visibleCells.length).toBeLessThan(80);
+    expect(jump2024.chunkIndices).toContain(375);
+  });
 });

@@ -9,6 +9,7 @@ import type {
   ImageItem,
   ImagesRangeResponse,
   TagSummary,
+  YearGroupSummary,
 } from '../../shared/types';
 import type { AppEnv } from '../auth/middleware';
 
@@ -74,7 +75,13 @@ export async function fetchTagsByImageIds(
   return map;
 }
 
-function buildFilterWhere(params: { albumId?: string; tag?: string }) {
+function buildFilterWhere(params: {
+  albumId?: string;
+  tag?: string;
+  hasExifDate?: boolean;
+  year?: number;
+  tzOffsetMinutes?: number;
+}) {
   const conditions: string[] = [];
   const binds: unknown[] = [];
 
@@ -98,8 +105,36 @@ function buildFilterWhere(params: { albumId?: string; tag?: string }) {
     binds.push(params.tag.trim().toLowerCase());
   }
 
+  if (typeof params.hasExifDate === 'boolean') {
+    conditions.push('i.has_exif_date = ?');
+    binds.push(params.hasExifDate ? 1 : 0);
+  }
+
+  if (typeof params.year === 'number' && Number.isInteger(params.year)) {
+    const offsetMs = (params.tzOffsetMinutes ?? 0) * 60 * 1000;
+    const yearStartMs = Date.UTC(params.year, 0, 1, 0, 0, 0) - offsetMs;
+    const yearEndMs = Date.UTC(params.year + 1, 0, 1, 0, 0, 0) - offsetMs;
+    conditions.push('i.taken_at >= ? AND i.taken_at < ?');
+    binds.push(yearStartMs, yearEndMs);
+  }
+
   const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   return { whereSql, binds };
+}
+
+function parseOptionalYear(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isInteger(parsed) || parsed < 1970 || parsed > 2100) return undefined;
+  return parsed;
+}
+
+function parseOptionalBool(raw: string | undefined): boolean | undefined {
+  if (!raw) return undefined;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
+  return undefined;
 }
 
 function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
@@ -109,13 +144,21 @@ function parseNonNegativeInt(raw: string | undefined, fallback: number): number 
   return parsed;
 }
 
+function parseTzOffsetMinutes(raw: string | undefined): number {
+  if (!raw) return 0;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(-720, Math.min(840, parsed));
+}
+
 export function createImageRoutes() {
   const images = new Hono<AppEnv>();
 
   images.get('/api/filters', async (c) => {
     const db = c.env.DB;
+    const tzOffsetSeconds = parseTzOffsetMinutes(c.req.query('tzOffset')) * 60;
 
-    const [totalRow, albumRows, tagRows] = await Promise.all([
+    const [totalRow, albumRows, tagRows, yearRows] = await Promise.all([
       db.prepare('SELECT COUNT(*) AS count FROM images').first<{ count: number }>(),
       db
         .prepare(
@@ -143,6 +186,16 @@ export function createImageRoutes() {
            ORDER BY image_count DESC, t.name ASC`
         )
         .all<{ id: number; name: string; image_count: number }>(),
+      db
+        .prepare(
+          `SELECT CAST(strftime('%Y', (taken_at / 1000) + ?, 'unixepoch') AS INTEGER) AS year,
+                  COUNT(*) AS count
+           FROM images
+           GROUP BY year
+           ORDER BY year DESC`
+        )
+        .bind(tzOffsetSeconds)
+        .all<{ year: number; count: number }>(),
     ]);
 
     const albums: AlbumSummary[] = (albumRows.results ?? []).map((row) => ({
@@ -160,9 +213,14 @@ export function createImageRoutes() {
       imageCount: Number(row.image_count ?? 0),
     }));
 
+    const years: YearGroupSummary[] = (yearRows.results ?? [])
+      .filter((r) => Number.isFinite(Number(r.year)) && Number(r.count) > 0)
+      .map((r) => ({ year: Number(r.year), count: Number(r.count) }));
+
     const body: FiltersResponse = {
       albums,
       tags,
+      years,
       totalImages: Number(totalRow?.count ?? 0),
     };
     return c.json(body);
@@ -175,8 +233,18 @@ export function createImageRoutes() {
     const limit = Math.min(Math.max(1, requestedLimit || CHUNK_SIZE), MAX_PAGE_LIMIT);
     const albumId = c.req.query('albumId')?.trim() || undefined;
     const tag = c.req.query('tag')?.trim() || undefined;
+    const hasExifDate = parseOptionalBool(c.req.query('hasExifDate'));
+    const year = parseOptionalYear(c.req.query('year'));
+    const tzOffsetMinutes = parseTzOffsetMinutes(c.req.query('tzOffset'));
+    const includeYears = offset === 0 || parseOptionalBool(c.req.query('includeYears')) === true;
 
-    const { whereSql, binds } = buildFilterWhere({ albumId, tag });
+    const { whereSql, binds } = buildFilterWhere({
+      albumId,
+      tag,
+      hasExifDate,
+      year,
+      tzOffsetMinutes,
+    });
 
     const countRow = await db
       .prepare(`SELECT COUNT(*) AS count FROM images i ${whereSql}`)
@@ -184,6 +252,30 @@ export function createImageRoutes() {
       .first<{ count: number }>();
 
     const total = Number(countRow?.count ?? 0);
+
+    let years: YearGroupSummary[] | undefined;
+    if (includeYears) {
+      if (total === 0) {
+        years = [];
+      } else {
+        const tzOffsetSeconds = tzOffsetMinutes * 60;
+        const { results: yearRows } = await db
+          .prepare(
+            `SELECT CAST(strftime('%Y', (i.taken_at / 1000) + ?, 'unixepoch') AS INTEGER) AS year,
+                    COUNT(*) AS count
+             FROM images i
+             ${whereSql}
+             GROUP BY year
+             ORDER BY year DESC`
+          )
+          .bind(tzOffsetSeconds, ...binds)
+          .all<{ year: number; count: number }>();
+
+        years = (yearRows ?? [])
+          .filter((r) => Number.isFinite(Number(r.year)) && Number(r.count) > 0)
+          .map((r) => ({ year: Number(r.year), count: Number(r.count) }));
+      }
+    }
 
     const { results } = await db
       .prepare(
@@ -227,6 +319,7 @@ export function createImageRoutes() {
       offset,
       limit,
       items,
+      ...(years !== undefined ? { years } : {}),
     };
     return c.json(body);
   });
@@ -235,8 +328,17 @@ export function createImageRoutes() {
     const db = c.env.DB;
     const albumId = c.req.query('albumId')?.trim() || undefined;
     const tag = c.req.query('tag')?.trim() || undefined;
+    const hasExifDate = parseOptionalBool(c.req.query('hasExifDate'));
+    const year = parseOptionalYear(c.req.query('year'));
+    const tzOffsetMinutes = parseTzOffsetMinutes(c.req.query('tzOffset'));
 
-    const { whereSql, binds } = buildFilterWhere({ albumId, tag });
+    const { whereSql, binds } = buildFilterWhere({
+      albumId,
+      tag,
+      hasExifDate,
+      year,
+      tzOffsetMinutes,
+    });
 
     const { results } = await db
       .prepare(

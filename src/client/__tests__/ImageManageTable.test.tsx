@@ -311,4 +311,65 @@ describe('ImageManageTable component', () => {
     });
     expect(requestedUrls[2]).toContain('offset=0&limit=500');
   });
+
+  it('filters by missing shooting date (hasExifDate=false) and bulk-assigns takenAt', async () => {
+    const requestedUrls: string[] = [];
+    let lastBulkPayload: Record<string, unknown> | null = null;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method ?? 'GET';
+
+      if (url.startsWith('/api/images') && method === 'GET') {
+        requestedUrls.push(url);
+        const items = url.includes('hasExifDate=false') ? [SAMPLE_ITEMS[1]] : SAMPLE_ITEMS;
+        return new Response(JSON.stringify({ total: items.length, offset: 0, limit: 40, items }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (url === '/api/admin/images/bulk-update' && method === 'POST') {
+        lastBulkPayload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return new Response(
+          JSON.stringify({ ok: true, updatedIds: ['img-22222222'], updatedCount: 1 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response('not found', { status: 404 });
+    });
+
+    render(<ImageManageTable albums={ALBUMS} tags={TAGS} />);
+    await flush();
+
+    // Filter to missing shooting date only
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('manage-exif-filter'), { target: { value: 'false' } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(requestedUrls[1]).toContain('hasExifDate=false');
+    expect(screen.queryByTestId('image-row-img-11111111')).toBeNull();
+    expect(screen.getByTestId('image-row-img-22222222')).toBeTruthy();
+
+    // Select the missing-EXIF photo and bulk-assign a shooting date
+    await act(() => {
+      fireEvent.click(screen.getByTestId('select-image-img-22222222'));
+    });
+    await act(() => {
+      fireEvent.input(screen.getByTestId('bulk-taken-at-input'), {
+        target: { value: '2025-08-15T14:30' },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('bulk-set-taken-at-button'));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(lastBulkPayload).toEqual({
+      ids: ['img-22222222'],
+      takenAt: new Date('2025-08-15T14:30').getTime(),
+    });
+    expect(screen.getByTestId('manage-success').textContent).toContain('촬영일을');
+  });
 });

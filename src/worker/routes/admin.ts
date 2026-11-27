@@ -508,15 +508,25 @@ export function createAdminRoutes() {
     );
 
     const hasAlbumChange = 'albumId' in body && body.albumId !== undefined;
+    const hasTakenAtChange = 'takenAt' in body && body.takenAt !== undefined;
     const addTags = 'addTags' in body ? normalizeTags(body.addTags) : [];
     const removeTags = 'removeTags' in body ? normalizeTags(body.removeTags) : [];
 
-    if (!hasAlbumChange && addTags.length === 0 && removeTags.length === 0) {
+    if (!hasAlbumChange && !hasTakenAtChange && addTags.length === 0 && removeTags.length === 0) {
       throw new ApiError(
         400,
         'NO_BULK_ACTION',
-        'At least one of albumId, addTags, or removeTags must be provided'
+        'At least one of albumId, takenAt, addTags, or removeTags must be provided'
       );
+    }
+
+    let nextTakenAt: number | null = null;
+    if (hasTakenAtChange) {
+      const parsed = Number(body.takenAt);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new ApiError(400, 'INVALID_TAKEN_AT', 'takenAt must be a positive timestamp');
+      }
+      nextTakenAt = Math.floor(parsed);
     }
 
     const db = c.env.DB;
@@ -582,6 +592,18 @@ export function createAdminRoutes() {
         await db
           .prepare(`UPDATE images SET album_id = ? WHERE id IN (${foundPlaceholders})`)
           .bind(nextAlbumId, ...idChunk)
+          .run();
+      }
+    }
+
+    if (hasTakenAtChange && nextTakenAt !== null) {
+      for (const idChunk of chunkArray(foundIds, D1_IN_CHUNK_SIZE)) {
+        const foundPlaceholders = idChunk.map(() => '?').join(', ');
+        await db
+          .prepare(
+            `UPDATE images SET taken_at = ?, has_exif_date = 1 WHERE id IN (${foundPlaceholders})`
+          )
+          .bind(nextTakenAt, ...idChunk)
           .run();
       }
     }

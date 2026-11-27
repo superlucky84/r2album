@@ -68,4 +68,52 @@ describe('VirtualGrid component', () => {
     expect(onSelectItem).toHaveBeenCalledWith(0);
     expect(onVisibleChunksChange).toHaveBeenCalledWith(expect.arrayContaining([0]));
   });
+
+  it('renders year section headers and year quick-jump bar when years metadata is provided', async () => {
+    const loadedMap = new Map<number, ImageItem>([
+      [0, makeItem(0)],
+      [1, makeItem(1)],
+      [2, makeItem(2)],
+    ]);
+    const onVisibleChunksChange = vi.fn();
+    const onStartYearFrame = vi.fn();
+
+    render(
+      <VirtualGrid
+        total={3}
+        years={[
+          { year: 2026, count: 1 },
+          { year: 2025, count: 2 },
+        ]}
+        resetKey={0}
+        getItem={(idx) => loadedMap.get(idx)}
+        onVisibleChunksChange={onVisibleChunksChange}
+        onSelectItem={vi.fn()}
+        onStartYearFrame={onStartYearFrame}
+      />
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByTestId('year-jump-bar')).toBeTruthy();
+    expect(screen.getByTestId('year-jump-2026').textContent).toContain('2026년');
+    expect(screen.getByTestId('year-jump-2025').textContent).toContain('2025년');
+    expect(screen.getByTestId('year-header-2026').textContent).toContain('2026년');
+    expect(screen.getByTestId('year-header-2025').textContent).toContain('2025년');
+
+    // Clicking year header's frame button triggers onStartYearFrame(year)
+    await act(() => {
+      fireEvent.click(screen.getByTestId('year-frame-2025'));
+    });
+    expect(onStartYearFrame).toHaveBeenCalledWith(2025);
+
+    // Clicking year jump pill smoothly scrolls without errors
+    const scrollToSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    await act(() => {
+      fireEvent.click(screen.getByTestId('year-jump-2025'));
+    });
+    expect(scrollToSpy).toHaveBeenCalled();
+  });
 });

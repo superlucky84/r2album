@@ -1,16 +1,19 @@
 import { lmount } from 'lithent';
-import type { AlbumSummary, TagSummary } from '@/shared/types';
+import type { AlbumSummary, TagSummary, YearGroupSummary } from '@/shared/types';
 
 export interface FilterBarProps {
   albums: AlbumSummary[];
   tags: TagSummary[];
+  years?: YearGroupSummary[];
   selectedAlbumId: string | null;
   selectedTag: string | null;
+  selectedYear?: number | null;
   filteredTotal: number;
   totalAllImages: number;
   isAdmin: boolean;
   onSelectAlbum: (albumId: string | null) => void;
   onSelectTag: (tag: string | null) => void;
+  onSelectYear?: (year: number | null) => void;
   onClearFilters: () => void;
   onEnterFrameMode: () => void;
   onGoAdmin?: () => void;
@@ -20,18 +23,22 @@ export const FilterBar = lmount<FilterBarProps>(() => {
   return ({
     albums,
     tags,
+    years = [],
     selectedAlbumId,
     selectedTag,
+    selectedYear = null,
     filteredTotal,
     totalAllImages,
     isAdmin,
     onSelectAlbum,
     onSelectTag,
+    onSelectYear,
     onClearFilters,
     onEnterFrameMode,
     onGoAdmin,
   }) => {
-    const hasActiveFilter = selectedAlbumId !== null || selectedTag !== null;
+    const hasActiveFilter =
+      selectedAlbumId !== null || selectedTag !== null || selectedYear !== null;
 
     return (
       <section
@@ -58,6 +65,26 @@ export const FilterBar = lmount<FilterBarProps>(() => {
                 </option>
               ))}
             </select>
+
+            {years.length > 0 && onSelectYear && (
+              <select
+                aria-label="연도 선택"
+                data-testid="filter-year-select"
+                value={selectedYear !== null ? String(selectedYear) : ''}
+                onChange={(e: Event) => {
+                  const val = (e.target as HTMLSelectElement).value;
+                  onSelectYear(val ? Number.parseInt(val, 10) : null);
+                }}
+                class="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-white focus:border-neutral-500 focus:outline-none"
+              >
+                <option value="">전체 연도</option>
+                {years.map((y) => (
+                  <option key={y.year} value={String(y.year)}>
+                    {y.year}년 ({y.count.toLocaleString()})
+                  </option>
+                ))}
+              </select>
+            )}
 
             <span data-testid="gallery-total-count" class="text-sm text-neutral-300">
               총 <strong class="font-semibold text-white">{filteredTotal.toLocaleString()}</strong>

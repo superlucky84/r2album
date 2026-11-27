@@ -41,6 +41,16 @@ export interface FetchImagesParams {
   limit?: number;
   albumId?: string;
   tag?: string;
+  year?: number;
+  hasExifDate?: boolean;
+  tzOffset?: number;
+}
+
+export interface FetchFrameIdsParams {
+  albumId?: string;
+  tag?: string;
+  year?: number;
+  tzOffset?: number;
 }
 
 export function fetchAdminStats(signal?: AbortSignal): Promise<AdminStatsResponse> {
@@ -48,7 +58,8 @@ export function fetchAdminStats(signal?: AbortSignal): Promise<AdminStatsRespons
 }
 
 export function fetchFilters(signal?: AbortSignal): Promise<FiltersResponse> {
-  return apiFetch<FiltersResponse>('/api/filters', { signal });
+  const tzOffset = -new Date().getTimezoneOffset();
+  return apiFetch<FiltersResponse>(`/api/filters?tzOffset=${tzOffset}`, { signal });
 }
 
 export function fetchImages(
@@ -60,18 +71,33 @@ export function fetchImages(
   if (typeof params.limit === 'number') query.set('limit', String(params.limit));
   if (params.albumId) query.set('albumId', params.albumId);
   if (params.tag) query.set('tag', params.tag);
+  if (typeof params.year === 'number' && Number.isInteger(params.year)) {
+    query.set('year', String(params.year));
+  }
+  if (typeof params.hasExifDate === 'boolean') {
+    query.set('hasExifDate', String(params.hasExifDate));
+  }
+  if (typeof params.tzOffset === 'number' && Number.isFinite(params.tzOffset)) {
+    query.set('tzOffset', String(Math.round(params.tzOffset)));
+  }
 
   const qs = query.toString();
   return apiFetch<ImagesRangeResponse>(qs ? `/api/images?${qs}` : '/api/images', { signal });
 }
 
 export function fetchFrameIds(
-  params: { albumId?: string; tag?: string } = {},
+  params: FetchFrameIdsParams = {},
   signal?: AbortSignal
 ): Promise<FrameIdsResponse> {
   const query = new URLSearchParams();
   if (params.albumId) query.set('albumId', params.albumId);
   if (params.tag) query.set('tag', params.tag);
+  if (typeof params.year === 'number' && Number.isInteger(params.year)) {
+    query.set('year', String(params.year));
+  }
+  if (typeof params.tzOffset === 'number' && Number.isFinite(params.tzOffset)) {
+    query.set('tzOffset', String(Math.round(params.tzOffset)));
+  }
 
   const qs = query.toString();
   return apiFetch<FrameIdsResponse>(qs ? `/api/images/ids?${qs}` : '/api/images/ids', { signal });
@@ -106,6 +132,7 @@ export function deleteAdminImage(id: string): Promise<{ ok: true; deletedId: str
 export interface BulkUpdateImagesPayload {
   ids: string[];
   albumId?: string | null;
+  takenAt?: number;
   addTags?: string[];
   removeTags?: string[];
 }

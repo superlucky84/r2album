@@ -540,4 +540,186 @@ describe('Phase 3 API: media streaming, images range/filter & admin CRUD', () =>
     expect(bulkDel.status).toBe(200);
     expect(r2Store.size).toBe(0);
   });
+
+  it('filters by hasExifDate=false/true and supports bulk takenAt update that marks hasExifDate=true', async () => {
+    const app = createApp();
+    const { env } = createTestEnv();
+    const adminHeaders = await makeAuthHeader('owner@example.com', 'admin', 'Owner');
+    const jsonHeaders = { ...adminHeaders, 'Content-Type': 'application/json' };
+
+    const withExif = (await (
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({
+            metadata: { caption: 'Has EXIF', hasExifDate: true, takenAt: 1_700_000_000_000 },
+          }),
+        },
+        env
+      )
+    ).json()) as ImageItem;
+
+    const noExif1 = (await (
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({
+            metadata: { caption: 'No EXIF 1', hasExifDate: false, takenAt: null },
+          }),
+        },
+        env
+      )
+    ).json()) as ImageItem;
+
+    const noExif2 = (await (
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({
+            metadata: { caption: 'No EXIF 2', hasExifDate: false, takenAt: null },
+          }),
+        },
+        env
+      )
+    ).json()) as ImageItem;
+
+    // Filter only missing EXIF date -> 2 items
+    const missingRes = (await (
+      await app.request('/api/images?hasExifDate=false', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(missingRes.total).toBe(2);
+    expect(missingRes.items.map((i) => i.id).sort()).toEqual([noExif1.id, noExif2.id].sort());
+
+    // Filter only with EXIF date -> 1 item
+    const presentRes = (await (
+      await app.request('/api/images?hasExifDate=true', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(presentRes.total).toBe(1);
+    expect(presentRes.items[0].id).toBe(withExif.id);
+
+    // Invalid takenAt rejected with 400
+    expect(
+      (
+        await app.request(
+          '/api/admin/images/bulk-update',
+          {
+            method: 'POST',
+            headers: jsonHeaders,
+            body: JSON.stringify({ ids: [noExif1.id], takenAt: -1 }),
+          },
+          env
+        )
+      ).status
+    ).toBe(400);
+
+    // Bulk assign takenAt to both missing-EXIF photos -> flips hasExifDate to true
+    const targetTakenAt = Date.UTC(2024, 7, 15, 10, 30, 0);
+    const bulkTakenRes = await app.request(
+      '/api/admin/images/bulk-update',
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ ids: [noExif1.id, noExif2.id], takenAt: targetTakenAt }),
+      },
+      env
+    );
+    expect(bulkTakenRes.status).toBe(200);
+
+    // Missing EXIF filter is now 0, and present filter has all 3 with updated takenAt
+    const missingAfter = (await (
+      await app.request('/api/images?hasExifDate=false', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(missingAfter.total).toBe(0);
+
+    const presentAfter = (await (
+      await app.request('/api/images?hasExifDate=true', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(presentAfter.total).toBe(3);
+    const updatedItem = presentAfter.items.find((i) => i.id === noExif1.id);
+    expect(updatedItem?.takenAt).toBe(targetTakenAt);
+    expect(updatedItem?.hasExifDate).toBe(true);
+  });
+
+  it('returns timezone-aware year group counts on offset=0 for year-grouped virtual scroll', async () => {
+    const app = createApp();
+    const { env } = createTestEnv();
+    const adminHeaders = await makeAuthHeader('owner@example.com', 'admin', 'Owner');
+
+    // Dec 31 2025 16:00 UTC == Jan 1 2026 01:00 KST (+540 min)
+    const borderTs = Date.UTC(2025, 11, 31, 16, 0, 0);
+    const ts2026 = Date.UTC(2026, 5, 10, 12, 0, 0);
+    const ts2024 = Date.UTC(2024, 2, 5, 12, 0, 0);
+
+    for (const [caption, takenAt] of [
+      ['2026 mid', ts2026],
+      ['KST 2026 / UTC 2025', borderTs],
+      ['2024 spring', ts2024],
+    ] as const) {
+      await app.request(
+        '/api/admin/images',
+        {
+          method: 'POST',
+          headers: adminHeaders,
+          body: buildUploadForm({ metadata: { caption, hasExifDate: true, takenAt } }),
+        },
+        env
+      );
+    }
+
+    // In UTC (tzOffset=0): 2026 (1), 2025 (1), 2024 (1)
+    const utcRes = (await (
+      await app.request('/api/images?offset=0&limit=40&tzOffset=0', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(utcRes.years).toEqual([
+      { year: 2026, count: 1 },
+      { year: 2025, count: 1 },
+      { year: 2024, count: 1 },
+    ]);
+
+    // In KST (tzOffset=540): 2026 (2), 2024 (1)
+    const kstRes = (await (
+      await app.request(
+        '/api/images?offset=0&limit=40&tzOffset=540',
+        { headers: adminHeaders },
+        env
+      )
+    ).json()) as ImagesRangeResponse;
+    expect(kstRes.years).toEqual([
+      { year: 2026, count: 2 },
+      { year: 2024, count: 1 },
+    ]);
+
+    // Filter both /api/images and /api/images/ids by year=2026 in KST (+540) -> 2 items
+    const year2026Images = (await (
+      await app.request('/api/images?year=2026&tzOffset=540', { headers: adminHeaders }, env)
+    ).json()) as ImagesRangeResponse;
+    expect(year2026Images.total).toBe(2);
+
+    const year2026Frame = (await (
+      await app.request('/api/images/ids?year=2026&tzOffset=540', { headers: adminHeaders }, env)
+    ).json()) as FrameIdsResponse;
+    expect(year2026Frame.total).toBe(2);
+
+    // Filter /api/images/ids by year=2024 in KST -> 1 item
+    const year2024Frame = (await (
+      await app.request('/api/images/ids?year=2024&tzOffset=540', { headers: adminHeaders }, env)
+    ).json()) as FrameIdsResponse;
+    expect(year2024Frame.total).toBe(1);
+    expect(year2024Frame.items[0].caption).toBe('2024 spring');
+
+    // /api/filters also includes years breakdown
+    const filtersWithYears = (await (
+      await app.request('/api/filters?tzOffset=540', { headers: adminHeaders }, env)
+    ).json()) as FiltersResponse;
+    expect(filtersWithYears.years).toEqual([
+      { year: 2026, count: 2 },
+      { year: 2024, count: 1 },
+    ]);
+  });
 });

@@ -47,7 +47,7 @@ describe('App auth guard & RBAC routing', () => {
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      if (url === '/api/filters') {
+      if (url.startsWith('/api/filters')) {
         return new Response(JSON.stringify({ albums: [], tags: [], totalImages: 0 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -102,7 +102,7 @@ describe('App auth guard & RBAC routing', () => {
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      if (url === '/api/filters') {
+      if (url.startsWith('/api/filters')) {
         return new Response(JSON.stringify({ albums: [], tags: [], totalImages: 0 }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },

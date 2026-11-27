@@ -204,9 +204,9 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 | Method | Endpoint | 설명 | 응답 핵심 필드 |
 |---|---|---|---|
 | `GET` | `/api/me` | 현재 세션 및 권한 조회 | `{ authenticated, user?: { email, name, role } }` |
-| `GET` | `/api/filters` | 앨범 목록(이미지 수 포함) + 태그 목록(이미지 수 포함) | `{ albums: AlbumSummary[], tags: TagSummary[], totalImages }` |
-| `GET` | `/api/images` | 구간별 이미지 메타데이터 조회 (`?offset=0&limit=40&albumId=&tag=`) | `{ total, offset, limit, items: ImageItem[] }` |
-| `GET` | `/api/images/ids` | 액자 롤링용 필터 범위 전체 ID/메타 경량 목록 (`?albumId=&tag=`) | `{ total, items: FrameItem[] }` (`id, caption, takenAt, width, height`) |
+| `GET` | `/api/filters` | 앨범 목록(이미지 수 포함) + 태그 목록 + 연도별 장수 (`?tzOffset=`) | `{ albums: AlbumSummary[], tags: TagSummary[], years?: YearGroupSummary[], totalImages }` |
+| `GET` | `/api/images` | 구간별 이미지 메타데이터 조회 (`?offset=0&limit=40&albumId=&tag=&year=&hasExifDate=&tzOffset=`) | `{ total, offset, limit, items: ImageItem[], years?: YearGroupSummary[] }` |
+| `GET` | `/api/images/ids` | 액자 롤링용 필터 범위 전체 ID/메타 경량 목록 (`?albumId=&tag=&year=&tzOffset=`) | `{ total, items: FrameItem[] }` (`id, caption, takenAt, width, height`) |
 | `GET` | `/api/media/:variant/:id` | Private R2 이미지 스트리밍 (`variant`: `thumb` \| `display`) | `image/webp` + `Cache-Control: private, max-age=31536000, immutable` + `ETag` |
 
 > `ImageItem` 필드: `{ id, albumId, albumName, caption, tags: string[], takenAt, hasExifDate, uploadedAt, width, height, thumbUrl, displayUrl }`
@@ -220,7 +220,7 @@ CREATE INDEX idx_image_tags_tag ON image_tags (tag_id, image_id);
 | `PATCH` | `/api/admin/images/:id` | 캡션, 앨범, 태그 목록, `takenAt` 수정 |
 | `DELETE` | `/api/admin/images/:id` | 이미지 삭제 (R2 2개 객체 + D1 레코드 제거) |
 | `POST` | `/api/admin/images/bulk-delete` | 다중 선택 이미지 일괄 삭제 (`{ ids: string[] }`, 최대 500건/요청, D1 50건·R2 500키 청크 분할) |
-| `POST` | `/api/admin/images/bulk-update` | 다중 선택 이미지 일괄 앨범 이동 및 태그 추가/제거 (`{ ids: string[], albumId?: string \| null, addTags?: string[], removeTags?: string[] }`, 최대 500건/요청) |
+| `POST` | `/api/admin/images/bulk-update` | 다중 선택 이미지 일괄 앨범 이동 · 촬영일(`takenAt`) 설정 · 태그 추가/제거 (`{ ids: string[], albumId?: string \| null, takenAt?: number, addTags?: string[], removeTags?: string[] }`, 최대 500건/요청) |
 | `POST` / `PATCH` / `DELETE` | `/api/admin/albums` (`/:id`) | 앨범 생성, 이름/설명 수정, 삭제(소속 이미지는 `album_id = NULL` 유지) |
 | `GET` / `POST` / `PATCH` / `DELETE` | `/api/admin/users` (`/:email`) | 허용/대기 사용자 목록 조회(`pending` 우선 정렬 + `pendingCount`), 직접 사전 등록(`approved`), 승인/거절/역할 변경(`PATCH`: `status`, `role`, `note`), 제거 (`BOOTSTRAP_ADMIN_EMAIL`은 삭제·강등 불가) |
 

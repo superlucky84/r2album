@@ -93,7 +93,13 @@ export interface FrameItem {
 export interface FiltersResponse {
   albums: AlbumSummary[];
   tags: TagSummary[];
+  years?: YearGroupSummary[];
   totalImages: number;
+}
+
+export interface YearGroupSummary {
+  year: number;
+  count: number;
 }
 
 export interface ImagesRangeResponse {
@@ -101,6 +107,7 @@ export interface ImagesRangeResponse {
   offset: number;
   limit: number;
   items: ImageItem[];
+  years?: YearGroupSummary[];
 }
 
 export interface FrameIdsResponse {

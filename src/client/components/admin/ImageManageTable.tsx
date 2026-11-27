@@ -54,6 +54,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
   const pageSize = state<number>(CHUNK_SIZE, renew);
   const filterAlbumId = state<string>('', renew);
   const filterTag = state<string>('', renew);
+  const filterExifDate = state<'' | 'false' | 'true'>('', renew);
   const searchQuery = state<string>('', renew);
   const loading = state<boolean>(false, renew);
   const errorMessage = state<string | null>(null, renew);
@@ -62,6 +63,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
 
   const bulkAlbumTarget = state<string>('', renew);
   const bulkTagsInput = state<string>('', renew);
+  const bulkTakenAtLocal = state<string>('', renew);
   const bulkUpdating = state<boolean>(false, renew);
 
   const editDraft = state<EditDraft | null>(null, renew);
@@ -80,6 +82,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
         limit: nextLimit,
         albumId: filterAlbumId.value || undefined,
         tag: filterTag.value || undefined,
+        hasExifDate: filterExifDate.value === '' ? undefined : filterExifDate.value === 'true',
       });
       if (seq !== requestSeq) return;
       items.value = res.items;
@@ -103,9 +106,14 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     void loadImages(0);
   });
 
-  const handleFilterChange = (nextAlbum: string, nextTag: string) => {
+  const handleFilterChange = (
+    nextAlbum: string,
+    nextTag: string,
+    nextExif: '' | 'false' | 'true' = filterExifDate.value
+  ) => {
     filterAlbumId.value = nextAlbum;
     filterTag.value = nextTag;
+    filterExifDate.value = nextExif;
     selectedIds.value = [];
     editDraft.value = null;
     void loadImages(0, pageSize.value);
@@ -259,6 +267,33 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
     }
   };
 
+  const handleBulkSetTakenAt = async () => {
+    if (selectedIds.value.length === 0 || bulkUpdating.value) return;
+    const parsedTakenAt = fromDateTimeLocalValue(bulkTakenAtLocal.value);
+    if (parsedTakenAt === null) {
+      errorMessage.value = '적용할 촬영일을 올바르게 선택해 주세요.';
+      return;
+    }
+
+    bulkUpdating.value = true;
+    errorMessage.value = null;
+    successMessage.value = null;
+    try {
+      const res = await bulkUpdateAdminImages({
+        ids: selectedIds.value.slice(0, BULK_DELETE_MAX),
+        takenAt: parsedTakenAt,
+      });
+      await loadImages(offset.value);
+      latestProps.onDataChanged?.();
+      successMessage.value = `${res.updatedCount}장의 촬영일을 ${formatDateTime(parsedTakenAt)}(으)로 설정했습니다.`;
+      bulkTakenAtLocal.value = '';
+    } catch (err: unknown) {
+      errorMessage.value = err instanceof Error ? err.message : '일괄 촬영일 설정에 실패했습니다.';
+    } finally {
+      bulkUpdating.value = false;
+    }
+  };
+
   const confirmDelete = async () => {
     const target = deleteModal.value;
     if (!target || deleting.value) return;
@@ -367,6 +402,24 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
               ))}
             </select>
 
+            <select
+              aria-label="촬영일 유무 필터"
+              data-testid="manage-exif-filter"
+              value={filterExifDate.value}
+              onChange={(e: Event) =>
+                handleFilterChange(
+                  filterAlbumId.value,
+                  filterTag.value,
+                  (e.target as HTMLSelectElement).value as '' | 'false' | 'true'
+                )
+              }
+              class="rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-neutral-500 focus:outline-none"
+            >
+              <option value="">촬영일 전체</option>
+              <option value="false">촬영일 없음만 보기</option>
+              <option value="true">촬영일 있음만 보기</option>
+            </select>
+
             <input
               type="search"
               aria-label="이미지 검색"
@@ -445,7 +498,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
               </span>
             </div>
 
-            <div class="grid gap-3 lg:grid-cols-2">
+            <div class="grid gap-3 lg:grid-cols-3">
               {/* Bulk Album Move */}
               <div class="flex flex-wrap items-center gap-2">
                 <select
@@ -456,7 +509,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
                   onChange={(e: Event) => {
                     bulkAlbumTarget.value = (e.target as HTMLSelectElement).value;
                   }}
-                  class="min-w-[180px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none"
+                  class="min-w-[160px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none"
                 >
                   <option value="">이동할 앨범 선택...</option>
                   <option value="__unassigned__">미분류로 이동</option>
@@ -477,6 +530,30 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
                 </button>
               </div>
 
+              {/* Bulk Set Shooting Date (takenAt) */}
+              <div class="flex flex-wrap items-center gap-2">
+                <input
+                  type="datetime-local"
+                  aria-label="일괄 적용할 촬영일"
+                  data-testid="bulk-taken-at-input"
+                  value={bulkTakenAtLocal.value}
+                  disabled={bulkUpdating.value}
+                  onInput={(e: Event) => {
+                    bulkTakenAtLocal.value = (e.target as HTMLInputElement).value;
+                  }}
+                  class="min-w-[170px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-sky-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  data-testid="bulk-set-taken-at-button"
+                  disabled={!bulkTakenAtLocal.value || bulkUpdating.value}
+                  onClick={() => void handleBulkSetTakenAt()}
+                  class="rounded-xl border border-sky-500/60 bg-sky-950/60 px-3 py-2 text-xs font-medium text-sky-200 transition hover:bg-sky-900/70 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  촬영일 적용
+                </button>
+              </div>
+
               {/* Bulk Add / Remove Tags */}
               <div class="flex flex-wrap items-center gap-2">
                 <input
@@ -489,7 +566,7 @@ export const ImageManageTable = mount<ImageManageTableProps>((renew, initialProp
                     bulkTagsInput.value = (e.target as HTMLInputElement).value;
                   }}
                   placeholder="태그 입력 (쉼표 구분, 예: 바다, 가족)"
-                  class="min-w-[180px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-sky-500 focus:outline-none"
+                  class="min-w-[160px] flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder-neutral-500 focus:border-sky-500 focus:outline-none"
                 />
                 <button
                   type="button"

@@ -23,7 +23,7 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
   const store = initialProps.store ?? createGalleryStore();
 
   const lightboxIndex = state<number | null>(null, renew);
-  const frameModeOpen = state<boolean>(false, renew);
+  const frameModeFilter = state<GalleryFilter | null>(null, renew);
 
   const resetScrollTop = () => {
     if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
@@ -37,7 +37,7 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
 
   const applyFilter = (next: Partial<GalleryFilter>) => {
     lightboxIndex.value = null;
-    frameModeOpen.value = false;
+    frameModeFilter.value = null;
     resetScrollTop();
     void store.setFilter(next);
   };
@@ -54,14 +54,22 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
     void store.ensureIndex(nextIndex);
   };
 
-  const handleEnterFrameMode = () => {
-    const snap = store.getSnapshot();
+  const openFrameModeWithFilter = (targetFilter: GalleryFilter) => {
     if (latestProps.onEnterFrameMode) {
-      latestProps.onEnterFrameMode(snap.filter);
+      latestProps.onEnterFrameMode(targetFilter);
     } else {
       lightboxIndex.value = null;
-      frameModeOpen.value = true;
+      frameModeFilter.value = { ...targetFilter };
     }
+  };
+
+  const handleEnterFrameMode = () => {
+    openFrameModeWithFilter(store.getSnapshot().filter);
+  };
+
+  const handleStartYearFrame = (year: number) => {
+    const snap = store.getSnapshot();
+    openFrameModeWithFilter({ ...snap.filter, year });
   };
 
   mountCallback(() => {
@@ -83,31 +91,39 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
   return (props) => {
     latestProps = props;
     const snap = store.getSnapshot();
-    const hasFilter = snap.filter.albumId !== null || snap.filter.tag !== null;
+    const hasFilter =
+      snap.filter.albumId !== null || snap.filter.tag !== null || snap.filter.year !== null;
     const openIndex = lightboxIndex.value;
-    const activeAlbumName =
-      snap.filter.albumId === '__unassigned__'
-        ? '미분류'
-        : (snap.albums.find((a) => a.id === snap.filter.albumId)?.name ?? null);
-    const frameFilterParts: string[] = [];
-    if (activeAlbumName) frameFilterParts.push(activeAlbumName);
-    if (snap.filter.tag) frameFilterParts.push(`#${snap.filter.tag}`);
-    const frameFilterLabel =
-      frameFilterParts.length > 0 ? frameFilterParts.join(' · ') : '전체 사진';
+    const activeFrameFilter = frameModeFilter.value;
+
+    const buildFilterLabel = (f: GalleryFilter): string => {
+      const albumName =
+        f.albumId === '__unassigned__'
+          ? '미분류'
+          : (snap.albums.find((a) => a.id === f.albumId)?.name ?? null);
+      const parts: string[] = [];
+      if (albumName) parts.push(albumName);
+      if (f.year !== null && f.year !== undefined) parts.push(`${f.year}년`);
+      if (f.tag) parts.push(`#${f.tag}`);
+      return parts.length > 0 ? parts.join(' · ') : '전체 사진';
+    };
 
     return (
       <section data-testid="gallery-view" class="space-y-5">
         <FilterBar
           albums={snap.albums}
           tags={snap.tags}
+          years={snap.availableYears.length > 0 ? snap.availableYears : snap.years}
           selectedAlbumId={snap.filter.albumId}
           selectedTag={snap.filter.tag}
+          selectedYear={snap.filter.year}
           filteredTotal={snap.total}
           totalAllImages={snap.totalAllImages}
           isAdmin={props.isAdmin}
           onSelectAlbum={(albumId) => applyFilter({ albumId })}
           onSelectTag={(tag) => applyFilter({ tag })}
-          onClearFilters={() => applyFilter({ albumId: null, tag: null })}
+          onSelectYear={(year) => applyFilter({ year })}
+          onClearFilters={() => applyFilter({ albumId: null, tag: null, year: null })}
           onEnterFrameMode={handleEnterFrameMode}
           onGoAdmin={props.onGoAdmin}
         />
@@ -163,7 +179,7 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
               {hasFilter && (
                 <button
                   type="button"
-                  onClick={() => applyFilter({ albumId: null, tag: null })}
+                  onClick={() => applyFilter({ albumId: null, tag: null, year: null })}
                   class="rounded-xl border border-neutral-700 bg-neutral-800 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700"
                 >
                   필터 초기화
@@ -183,12 +199,14 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
         ) : (
           <VirtualGrid
             total={snap.total}
+            years={snap.years}
             resetKey={snap.generation}
             getItem={store.getItem}
             onVisibleChunksChange={(chunkIndices) => {
               void store.ensureChunks(chunkIndices);
             }}
             onSelectItem={handleOpenLightbox}
+            onStartYearFrame={handleStartYearFrame}
           />
         )}
 
@@ -209,12 +227,12 @@ export const GalleryView = mount<GalleryViewProps>((renew, initialProps) => {
           onNavigate={handleNavigateLightbox}
         />
 
-        {frameModeOpen.value && (
+        {activeFrameFilter && (
           <PhotoFrameMode
-            filter={snap.filter}
-            filterLabel={frameFilterLabel}
+            filter={activeFrameFilter}
+            filterLabel={buildFilterLabel(activeFrameFilter)}
             onClose={() => {
-              frameModeOpen.value = false;
+              frameModeFilter.value = null;
             }}
           />
         )}

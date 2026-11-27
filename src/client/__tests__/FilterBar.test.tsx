@@ -22,6 +22,7 @@ describe('FilterBar component', () => {
   it('handles album selection, tag chip toggle, clear filters, and admin link visibility', async () => {
     const onSelectAlbum = vi.fn();
     const onSelectTag = vi.fn();
+    const onSelectYear = vi.fn();
     const onClearFilters = vi.fn();
     const onEnterFrameMode = vi.fn();
     const onGoAdmin = vi.fn();
@@ -30,13 +31,19 @@ describe('FilterBar component', () => {
       <FilterBar
         albums={ALBUMS}
         tags={TAGS}
+        years={[
+          { year: 2026, count: 30 },
+          { year: 2025, count: 20 },
+        ]}
         selectedAlbumId="alb-1"
         selectedTag="바다"
+        selectedYear={2026}
         filteredTotal={8}
         totalAllImages={50}
         isAdmin={true}
         onSelectAlbum={onSelectAlbum}
         onSelectTag={onSelectTag}
+        onSelectYear={onSelectYear}
         onClearFilters={onClearFilters}
         onEnterFrameMode={onEnterFrameMode}
         onGoAdmin={onGoAdmin}
@@ -48,6 +55,7 @@ describe('FilterBar component', () => {
 
     await act(() => {
       fireEvent.change(screen.getByTestId('filter-album-select'), { target: { value: '' } });
+      fireEvent.change(screen.getByTestId('filter-year-select'), { target: { value: '2025' } });
       fireEvent.click(screen.getByTestId('filter-tag-가족'));
       fireEvent.click(screen.getByTestId('filter-tag-바다')); // active -> toggles off (null)
       fireEvent.click(screen.getByTestId('filter-clear-button'));
@@ -56,6 +64,7 @@ describe('FilterBar component', () => {
     });
 
     expect(onSelectAlbum).toHaveBeenCalledWith(null);
+    expect(onSelectYear).toHaveBeenCalledWith(2025);
     expect(onSelectTag).toHaveBeenNthCalledWith(1, '가족');
     expect(onSelectTag).toHaveBeenNthCalledWith(2, null);
     expect(onClearFilters).toHaveBeenCalledTimes(1);
